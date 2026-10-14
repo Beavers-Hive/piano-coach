@@ -15,6 +15,8 @@ import { RealtimeJudge } from "./Judge";
 let judge: RealtimeJudge | null = null;
 let frame = 0;
 let finishTimer = 0;
+let countInTimer = 0;
+let activeTimeline: ExerciseTimeline | null = null;
 let demoTriggered = new Set<string>();
 let slowedEventId: string | null = null;
 
@@ -23,7 +25,7 @@ function currentTimeline(): ExerciseTimeline | null {
 }
 
 function loop(): void {
-  const timeline = currentTimeline();
+  const timeline = activeTimeline;
   const state = useAppStore.getState();
   if (!timeline || !state.running) return;
   const playhead = getPlayheadMs();
@@ -45,6 +47,8 @@ export function startPractice(): void {
 }
 
 function countIn(timeline: ExerciseTimeline): void {
+  cancelCountIn();
+  activeTimeline = timeline;
   const state = useAppStore.getState();
   state.set({
     waitingForStart: false,
@@ -61,7 +65,16 @@ function countIn(timeline: ExerciseTimeline): void {
   startClock(-timeline.countInMs);
   transport.start("+0.03");
 
-  window.setTimeout(() => {
+  countInTimer = window.setTimeout(() => {
+    const current = currentTimeline();
+    if (
+      current?.exerciseId !== timeline.exerciseId ||
+      current.exerciseVersion !== timeline.exerciseVersion
+    ) {
+      cancelCountIn();
+      return;
+    }
+    countInTimer = 0;
     transport.stop();
     transport.cancel(0);
     startClock(0);
@@ -96,7 +109,7 @@ export function handlePracticeNote(
 ): void {
   const state = useAppStore.getState();
   state.press(pitch, on);
-  const timeline = state.timeline;
+  const timeline = activeTimeline;
   if (!timeline || !state.running || !judge) return;
   const playhead = getPlayheadMs();
 
@@ -106,7 +119,7 @@ export function handlePracticeNote(
     if (response.chordComplete) {
       const next = judge.nextStartMs();
       if (next === null) {
-        window.setTimeout(() => stopPractice(false), 350);
+        finishTimer = window.setTimeout(() => stopPractice(false), 350);
       } else {
         startClock(next);
         pauseClock();
@@ -127,10 +140,11 @@ export function handlePracticeNote(
 
 export function stopPractice(aborted: boolean): void {
   const state = useAppStore.getState();
-  const timeline = state.timeline;
+  const timeline = activeTimeline;
   if (!state.running || !timeline || !judge) return;
   cancelAnimationFrame(frame);
   clearTimeout(finishTimer);
+  finishTimer = 0;
   stopClock();
   const { events, summary } = judge.finish(aborted);
   state.set({
@@ -149,18 +163,23 @@ export function stopPractice(aborted: boolean): void {
     summary,
   });
   judge = null;
+  activeTimeline = null;
 }
 
 export function playDemo(): void {
   const timeline = currentTimeline();
-  if (!timeline) return;
+  const state = useAppStore.getState();
+  if (state.lessonState !== "demo" || timeline?.spec.mode !== "watch") return;
+  cancelCountIn();
   cancelAnimationFrame(frame);
   clearTimeout(finishTimer);
+  finishTimer = 0;
+  activeTimeline = timeline;
   demoTriggered = new Set();
   slowedEventId = null;
   setTimeScale(1);
   startClock(0);
-  useAppStore.getState().set({
+  state.set({
     running: true,
     lessonState: "demo",
     handsMode: "demo",
@@ -210,7 +229,40 @@ function playDemoNotes(timeline: ExerciseTimeline, playhead: number): void {
       exerciseId: timeline.exerciseId,
       exerciseVersion: timeline.exerciseVersion,
     });
+    activeTimeline = null;
   }
+}
+
+/** カウントインだけを取り消す。課題の差し替えや MIDI 切断時に使う。 */
+export function cancelCountIn(): void {
+  if (!countInTimer) return;
+  clearTimeout(countInTimer);
+  countInTimer = 0;
+  Tone.getTransport().stop();
+  Tone.getTransport().cancel(0);
+  stopClock();
+  activeTimeline = null;
+  useAppStore.getState().set({ waitingForStart: false, handsMode: "hidden" });
+}
+
+/** サーバー切断時など、送信を伴わずにすべての再生を止める。 */
+export function abortPlayback(): void {
+  cancelCountIn();
+  cancelAnimationFrame(frame);
+  clearTimeout(finishTimer);
+  finishTimer = 0;
+  Tone.getTransport().stop();
+  Tone.getTransport().cancel(0);
+  stopClock();
+  setTimeScale(1);
+  judge = null;
+  activeTimeline = null;
+  useAppStore.getState().set({
+    running: false,
+    waitingForStart: false,
+    handsMode: "hidden",
+    pressed: new Set(),
+  });
 }
 
 function lastEnd(timeline: ExerciseTimeline): number {

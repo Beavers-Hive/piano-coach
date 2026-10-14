@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { configureVoice, flushVoice } from "./audio/voice";
+import { cancelVoice, configureVoice, flushVoice } from "./audio/voice";
 import {
+  abortPlayback,
+  cancelCountIn,
   handlePracticeNote,
   playDemo,
   startPractice,
@@ -76,7 +78,10 @@ export default function App() {
       handlePracticeNote(pitch, velocity, on, timestamp);
     };
     void initialiseMidi(input);
-    setMidiDisconnectHandler(() => stopPractice(true));
+    setMidiDisconnectHandler(() => {
+      cancelCountIn();
+      stopPractice(true);
+    });
     const down = (event: KeyboardEvent) => {
       if (
         event.repeat ||
@@ -98,6 +103,7 @@ export default function App() {
     return () => {
       removeEventListener("keydown", down);
       removeEventListener("keyup", up);
+      setMidiDisconnectHandler(() => undefined);
     };
   }, []);
 
@@ -105,6 +111,19 @@ export default function App() {
     const demo = () => playDemo();
     addEventListener("piano-demo", demo);
     return () => removeEventListener("piano-demo", demo);
+  }, []);
+
+  useEffect(() => {
+    const disconnected = () => {
+      abortPlayback();
+      cancelVoice();
+    };
+    addEventListener("piano-ws-disconnected", disconnected);
+    addEventListener("piano-exercise-changed", cancelCountIn);
+    return () => {
+      removeEventListener("piano-ws-disconnected", disconnected);
+      removeEventListener("piano-exercise-changed", cancelCountIn);
+    };
   }, []);
 
   useEffect(() => {
@@ -124,6 +143,26 @@ export default function App() {
       // 読み込み演出の確認用。importing → analyzing（楽譜が届く）→ 約 8 秒後に課題の説明へ移る
       setSongs(mockSongs);
       return playMockImport(set);
+    }
+    if (mock && new URLSearchParams(location.search).has("demo")) {
+      // ?mock=1&demo=1: サーバーがお手本を始めたときと同じ状態（lessonState=demo、mode=watch）を再現する。
+      // 見た目の撮影テストで、ホログラムの手の表示を検査するために使う。
+      setSongs(mockSongs);
+      set({
+        timeline: {
+          ...mockTimeline,
+          spec: { ...mockTimeline.spec, mode: "watch" },
+        },
+        waitingForStart: false,
+        subtitle: "お手本を見てみよう",
+        lessonState: "demo",
+        camera: "play",
+      });
+      const timer = window.setTimeout(
+        () => dispatchEvent(new CustomEvent("piano-demo")),
+        800,
+      );
+      return () => clearTimeout(timer);
     }
     if (mock) {
       setSongs(mockSongs);

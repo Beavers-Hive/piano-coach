@@ -5,6 +5,7 @@ import { useAppStore } from "./store";
 let socket: WebSocket | undefined;
 // 接続が開く前に送ろうとしたメッセージ。開いたら順に送る（曲をすぐ選んだときに lesson.start が消えていた）
 const pending: string[] = [];
+let disconnected = false;
 
 let lastSubtitleUtterance = "";
 // 楽譜ページを 3D 空間に浮かべる状態（ScorePages.tsx）
@@ -12,6 +13,7 @@ const PAGE_STATES = ["importing", "analyzing", "hearing", "planning"];
 
 export function connectSocket(): void {
   if (new URLSearchParams(location.search).has("mock") || socket) return;
+  disconnected = false;
   socket = new WebSocket(
     `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`,
   );
@@ -28,9 +30,7 @@ export function connectSocket(): void {
         .set({ error: "サーバーからのメッセージを読めませんでした" });
     }
   };
-  socket.onclose = () => {
-    socket = undefined;
-  };
+  socket.onclose = handleSocketClose;
   socket.onerror = () =>
     useAppStore.getState().set({ error: "サーバーに接続できません" });
 }
@@ -38,7 +38,24 @@ export function connectSocket(): void {
 export function send(type: string, payload: Record<string, unknown>): void {
   const message = JSON.stringify({ type, payload });
   if (socket?.readyState === WebSocket.OPEN) socket.send(message);
-  else pending.push(message);
+  else if (!disconnected && socket?.readyState === WebSocket.CONNECTING)
+    pending.push(message);
+}
+
+export function handleSocketClose(): void {
+  socket = undefined;
+  disconnected = true;
+  pending.length = 0;
+  useAppStore.getState().set({
+    running: false,
+    waitingForStart: false,
+    handsMode: "hidden",
+    pressed: new Set(),
+    error: "接続が切れました。ページを再読み込みしてください。",
+  });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("piano-ws-disconnected"));
+  }
 }
 
 export function handleIncomingMessage({ type, payload }: WireMessage): void {
@@ -122,6 +139,9 @@ export function handleIncomingMessage({ type, payload }: WireMessage): void {
       state.set({ plan: payload.plan as never });
       break;
     case "exercise.ready":
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("piano-exercise-changed"));
+      }
       state.set({
         timeline: payload.timeline as ExerciseTimeline,
         waitingForStart: true,

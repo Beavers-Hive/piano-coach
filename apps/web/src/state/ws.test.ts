@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { mockTimeline } from "./mock";
 import { useAppStore } from "./store";
-import { handleIncomingMessage } from "./ws";
+import { handleIncomingMessage, handleSocketClose } from "./ws";
 
 describe("websocket receiver", () => {
   beforeEach(() =>
@@ -39,5 +39,25 @@ describe("websocket receiver", () => {
       payload: { utteranceId: "u2", delta: "次は右手で。", final: true },
     });
     expect(useAppStore.getState().subtitle).toBe("次は右手で。");
+  });
+
+  it("clears active play state and reports a terminal socket disconnect", () => {
+    useAppStore.getState().set({
+      running: true,
+      waitingForStart: true,
+      handsMode: "ghost",
+      pressed: new Set([60]),
+      error: undefined,
+    });
+
+    handleSocketClose();
+
+    expect(useAppStore.getState()).toMatchObject({
+      running: false,
+      waitingForStart: false,
+      handsMode: "hidden",
+      error: "接続が切れました。ページを再読み込みしてください。",
+    });
+    expect(useAppStore.getState().pressed.size).toBe(0);
   });
 });

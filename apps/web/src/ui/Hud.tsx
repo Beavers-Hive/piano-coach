@@ -32,6 +32,8 @@ export function Hud({
 }) {
   const s = useAppStore();
   const file = useRef<HTMLInputElement>(null);
+  const canPlayDemo =
+    s.lessonState === "demo" && s.timeline?.spec.mode === "watch";
   const answer = (text: string) => {
     if (s.question)
       send("hearing.answer", {
@@ -120,7 +122,9 @@ export function Hud({
         </button>
       )}
       <div className="controls">
-        <button onClick={playDemo}>お手本を再生</button>
+        <button disabled={!canPlayDemo} onClick={playDemo}>
+          お手本を再生
+        </button>
         <button onClick={() => s.set({ camera: "overview" })}>全体</button>
         <button onClick={() => s.set({ camera: "play" })}>演奏</button>
         <button onClick={() => s.set({ camera: "closeup" })}>寄り</button>
