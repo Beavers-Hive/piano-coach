@@ -1,0 +1,16 @@
+.miss-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: #ff173b;
+  animation: miss 0.28s ease-out forwards;
+  mix-blend-mode: screen;
+}
+@keyframes miss {
+  from {
+    opacity: 0.32;
+  }
+  to {
+    opacity: 0;
+  }
+}
