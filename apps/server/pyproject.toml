@@ -1,0 +1,33 @@
+[project]
+name = "piano-coach-server"
+version = "0.1.0"
+description = "Local backend for piano-coach"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "claude-agent-sdk==0.2.166",
+  "pydantic",
+  "mido",
+  "pypdfium2",
+  "pillow",
+  "httpx",
+  "python-multipart",
+]
+
+[project.scripts]
+piano-coach-server = "piano_coach.main:run"
+
+[dependency-groups]
+dev = ["pytest", "pytest-asyncio"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["piano_coach"]
