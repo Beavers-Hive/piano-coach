@@ -3,6 +3,8 @@ import type { ExerciseTimeline, ScoreModel, WireMessage } from "../types";
 import { useAppStore } from "./store";
 
 let socket: WebSocket | undefined;
+// 接続が開く前に送ろうとしたメッセージ。開いたら順に送る（曲をすぐ選んだときに lesson.start が消えていた）
+const pending: string[] = [];
 
 let lastSubtitleUtterance = "";
 
@@ -11,6 +13,10 @@ export function connectSocket(): void {
   socket = new WebSocket(
     `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`,
   );
+  socket.onopen = () => {
+    while (pending.length && socket?.readyState === WebSocket.OPEN)
+      socket.send(pending.shift()!);
+  };
   socket.onmessage = (event) => {
     try {
       handleIncomingMessage(JSON.parse(event.data) as WireMessage);
@@ -28,8 +34,9 @@ export function connectSocket(): void {
 }
 
 export function send(type: string, payload: Record<string, unknown>): void {
-  if (socket?.readyState === WebSocket.OPEN)
-    socket.send(JSON.stringify({ type, payload }));
+  const message = JSON.stringify({ type, payload });
+  if (socket?.readyState === WebSocket.OPEN) socket.send(message);
+  else pending.push(message);
 }
 
 export function handleIncomingMessage({ type, payload }: WireMessage): void {

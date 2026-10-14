@@ -4,7 +4,7 @@
   cd vendor/Irodori-TTS && HF_HUB_DISABLE_IMPLICIT_TOKEN=1 uv run --no-sync python ../../tts/server.py
 
 POST /synthesize {text, seed?} -> audio/wav
-GET  /health                  -> {"ok": true, "model": ...}
+GET  /health                  -> {"ok": true, "model": ..., "ref_latent": ..., "steps": ..., "duration_scale": ...}
 """
 from __future__ import annotations
 
@@ -40,8 +40,18 @@ CODEC_DEVICE = os.environ.get("TTS_CODEC_DEVICE", "mps")
 PRECISION = os.environ.get("TTS_PRECISION", "fp32")
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("TTS_PORT", "8790"))
-CAPTION = "明るく優しい20代女性のピアノの先生。落ち着いたテンポで、はきはきと話す。"
-DEFAULT_SEED = 1234
+# --- 声の設定（環境変数で切り替えられる。2026-10-15 の A/B で決定: spikes/tts_out/ab/README.md） ---
+CAPTION = os.environ.get("TTS_CAPTION", "明るく優しい20代女性のピアノの先生。落ち着いたテンポで、はきはきと話す。")
+DEFAULT_SEED = int(os.environ.get("TTS_SEED", "1234"))
+# 参照音声の latent（.pt）。あれば声をこれに固定する（文ごとの声の揺れを防ぐ）。空文字 or "none" で無効（キャプションだけの声）。
+# tts/voice/teacher_ref.pt は、このモデル自身が生成した音声（他人の声ではない）から作った。
+_DEFAULT_REF = Path(__file__).resolve().parent / "voice" / "teacher_ref.pt"
+_ref_env = os.environ.get("TTS_REF_LATENT", str(_DEFAULT_REF))
+REF_LATENT = _ref_env if _ref_env.lower() not in ("", "none") and Path(_ref_env).is_file() else None
+# MeanFlow の既定は 4 ステップ。空なら既定。A/B では 4〜32 で差が小さく、4 が最速だった。
+STEPS = int(os.environ["TTS_STEPS"]) if os.environ.get("TTS_STEPS") else None
+# 1.0 未満で話すテンポが速くなる（既定 0.9。1.0 だと 1 秒あたり約 5 モーラで間延びする）
+DURATION_SCALE = float(os.environ.get("TTS_DURATION_SCALE", "0.9"))
 MAX_TEXT_CHARS = 400
 
 _runtime: InferenceRuntime | None = None
@@ -56,7 +66,15 @@ class SynthesizeRequest(BaseModel):
 
 def _synth_wav_bytes(text: str, seed: int) -> bytes:
     assert _runtime is not None
-    req = SamplingRequest(text=text, caption=CAPTION, no_ref=True, ref_wav=None, num_steps=None, seed=seed)
+    req = SamplingRequest(
+        text=text,
+        caption=CAPTION or None,
+        no_ref=REF_LATENT is None,
+        ref_latent=REF_LATENT,
+        num_steps=STEPS,
+        duration_scale=DURATION_SCALE,
+        seed=seed,
+    )
     result = _runtime.synthesize(req)
     with tempfile.TemporaryDirectory() as d:
         path = save_wav(Path(d) / "out.wav", result.audio, result.sample_rate)
@@ -83,7 +101,14 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/health")
 async def health():
-    return {"ok": _runtime is not None, "model": MODEL}
+    return {
+        "ok": _runtime is not None,
+        "model": MODEL,
+        "ref_latent": REF_LATENT,
+        "steps": STEPS,
+        "duration_scale": DURATION_SCALE,
+        "seed": DEFAULT_SEED,
+    }
 
 
 @app.post("/synthesize")
