@@ -16,6 +16,7 @@ import { Hands } from "./Hands";
 import { HitEffects } from "./HitEffects";
 import { Keyboard } from "./Keyboard";
 import { FallingNotes, Highway } from "./Notes";
+import { ScorePages } from "./ScorePages";
 import { TeacherOrb } from "./TeacherOrb";
 
 export function PianoScene() {
@@ -46,6 +47,7 @@ export function PianoScene() {
       <Highway />
       <FallingNotes />
       <HitEffects />
+      <ScorePages />
       <Hands />
       <TeacherOrb />
       <mesh rotation-x={-Math.PI / 2} position={[0, -0.07, 0]} receiveShadow>

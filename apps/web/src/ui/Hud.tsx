@@ -2,6 +2,27 @@ import { useRef } from "react";
 import { playDemo, startPractice } from "../midi/Player";
 import { useAppStore } from "../state/store";
 import { send } from "../state/ws";
+/** 先生が話していないときの字幕（状態に合わせる）。 */
+function idleSubtitle(state: string, waitingForStart: boolean): string {
+  if (waitingForStart) return "どれか鍵盤を押してスタート";
+  switch (state) {
+    case "idle":
+      return "曲を選ぶか、楽譜の PDF をドロップしてください";
+    case "importing":
+    case "analyzing":
+      return "先生が楽譜を読んでいます…";
+    case "hearing":
+    case "planning":
+      return "先生が練習の計画を考えています…";
+    case "reviewing":
+      return "先生が演奏を聴いて考えています…";
+    case "finished":
+      return "今日のレッスンはここまで。おつかれさま！";
+    default:
+      return "先生があなたの演奏を待っています";
+  }
+}
+
 export function Hud({
   songs,
   onSong,
@@ -85,10 +106,7 @@ export function Hud({
         </div>
       )}
       <div className="subtitle">
-        {s.subtitle ||
-          (s.waitingForStart
-            ? "どれか鍵盤を押してスタート"
-            : "先生があなたの演奏を待っています")}
+        {s.subtitle || idleSubtitle(s.lessonState, s.waitingForStart)}
       </div>
       {s.combo > 1 && (
         <div className="combo">

@@ -19,6 +19,13 @@ type AppState = {
   health?: { claude: boolean; tts: boolean };
   lessonState: LessonState;
   score?: ScoreModel;
+  /** 楽譜ページの PNG の URL（song.ready で届く）。読み込み演出で使う。 */
+  pageImageUrls: string[];
+  /** 読み取りの進み具合（import.progress）。演出の強さに使う。 */
+  importProgress?: {
+    stage: "reading" | "analyzing" | "fingering";
+    ratio: number;
+  };
   timeline: ExerciseTimeline | null;
   plan?: Plan;
   subtitle: string;
@@ -50,6 +57,7 @@ export const useAppStore = create<AppState>((set) => ({
   midiPorts: [],
   midiUnavailable: false,
   lessonState: "idle",
+  pageImageUrls: [],
   timeline: null,
   subtitle: "",
   fingers: {},

@@ -35,3 +35,34 @@ test("visual: briefing, demo hands and practice render without shader errors", a
 
   expect(shaderErrors, shaderErrors.join("\n")).toEqual([]);
 });
+
+// 楽譜を読み込むときの演出（?mock=1&import=1 で、約 8 秒の importing → analyzing → hearing を再現する）
+test("visual: score import shows floating pages and light particles", async ({
+  page,
+}) => {
+  const shaderErrors: string[] = [];
+  page.on("console", (message) => {
+    const text = message.text();
+    if (/Shader Error|WebGLProgram|not compiled/i.test(text))
+      shaderErrors.push(text.slice(0, 300));
+  });
+
+  await page.goto("/?mock=1&import=1");
+  await page.getByRole("button", { name: /音声を有効/ }).click();
+  const started = Date.now();
+  await page.getByRole("button", { name: /レッスンへ進む/ }).click();
+  await expect(page.locator("canvas")).toBeVisible();
+  const shoot = async (name: string, atMs: number) => {
+    await page.waitForTimeout(Math.max(0, atMs - (Date.now() - started)));
+    await page.screenshot({ path: `${SHOTS}/${name}.png` });
+  };
+  await shoot("0-import-0-appear", 1150);
+  await shoot("0-import-a-pages", 1800);
+  await shoot("0-import-b-particles", 3600);
+  await shoot("0-import-c-notes-forming", 5000);
+  await shoot("0-import-d-formed", 7000);
+  await shoot("0-import-e-fading", 8700);
+  await shoot("0-import-f-done", 10500);
+
+  expect(shaderErrors, shaderErrors.join("\n")).toEqual([]);
+});

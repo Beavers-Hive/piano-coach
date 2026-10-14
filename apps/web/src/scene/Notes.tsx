@@ -77,7 +77,8 @@ export function FallingNotes() {
         : KEY.whiteWidth * 0.78;
 
       dummy.position.set(keyX(note.pitch), mid.y, mid.z);
-      dummy.rotation.set(-Math.atan(RAMP), 0, 0);
+      // 奥（-z）ほど高い上り坂に沿わせる（x 軸回転 +atan で、奥側が上がる）
+      dummy.rotation.set(Math.atan(RAMP), 0, 0);
       dummy.scale.set(visible ? width : 0, NOTE_HEIGHT, length);
       dummy.updateMatrix();
       bodies.current.setMatrixAt(index, dummy.matrix);
@@ -185,7 +186,8 @@ export function Highway() {
   );
   const start = highwayPoint(0);
   const mid = highwayPoint(HIGHWAY_LENGTH / 2);
-  const tilt = -Math.atan(RAMP);
+  // 床とレーン（plane）は -π/2 で水平にしたうえで、奥側が上がるよう +atan だけ起こす
+  const tilt = Math.atan(RAMP);
 
   return (
     <group>

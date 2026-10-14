@@ -10,6 +10,7 @@ import { initialiseMidi, setMidiDisconnectHandler } from "./midi/MidiInput";
 import { setTimeScale } from "./midi/clock";
 import { PianoScene } from "./scene/Scene";
 import { mockSongs, mockTimeline } from "./state/mock";
+import type { ScoreModel } from "./types";
 import { useAppStore } from "./state/store";
 import { connectSocket, send } from "./state/ws";
 import { Hud } from "./ui/Hud";
@@ -119,6 +120,11 @@ export default function App() {
 
   useEffect(() => {
     if (!entered) return;
+    if (mock && new URLSearchParams(location.search).get("import") === "1") {
+      // 読み込み演出の確認用。importing → analyzing（楽譜が届く）→ 約 8 秒後に課題の説明へ移る
+      setSongs(mockSongs);
+      return playMockImport(set);
+    }
     if (mock) {
       setSongs(mockSongs);
       set({
@@ -183,4 +189,79 @@ export default function App() {
   ) : (
     <Setup onBegin={() => setEntered(true)} />
   );
+}
+
+/** ?mock=1&import=1 のときだけ、楽譜の読み込みから課題の説明までを約 8 秒で再現する。 */
+function playMockImport(set: (patch: Partial<AppStateLike>) => void) {
+  type Patch = Partial<AppStateLike>;
+  const timers: number[] = [];
+  const at = (ms: number, patch: Patch) =>
+    timers.push(window.setTimeout(() => set(patch), ms));
+  set({
+    lessonState: "importing",
+    camera: "score",
+    // 1 ページ分の PNG を 3 枚並べる（扇状に重なる様子の確認用）
+    pageImageUrls: Array(3).fill("/mock/page-1.png"),
+    importProgress: { stage: "reading", ratio: 0.1 },
+  });
+  at(900, {
+    lessonState: "analyzing",
+    importProgress: { stage: "analyzing", ratio: 0.3 },
+  });
+  at(2200, { importProgress: { stage: "analyzing", ratio: 0.55 } });
+  at(2800, { score: mockScore() });
+  at(4200, { importProgress: { stage: "analyzing", ratio: 0.8 } });
+  at(5600, {
+    importProgress: { stage: "fingering", ratio: 1 },
+    lessonState: "hearing",
+  });
+  at(8000, {
+    timeline: mockTimeline,
+    waitingForStart: true,
+    subtitle: "メヌエット ト長調 — 右手を練習しましょう",
+    lessonState: "briefing",
+    camera: "play",
+  });
+  return () => timers.forEach((timer) => window.clearTimeout(timer));
+}
+
+type AppStateLike = ReturnType<typeof useAppStore.getState>;
+
+/** モック用の ScoreModel（メヌエットの冒頭。右手は mockTimeline と同じ、左手は二分音符）。 */
+function mockScore(): ScoreModel {
+  const left = [55, 59, 62, 57, 60, 64];
+  return {
+    songId: "minuet-g",
+    title: "メヌエット ト長調",
+    composer: "J. S. Bach",
+    ppq: 480,
+    timeSignature: { num: 3, den: 4 },
+    bpm: 100,
+    keyFifths: 1,
+    measures: Array.from({ length: 4 }, (_, index) => ({
+      index: index + 1,
+      startTick: index * 1440,
+      endTick: (index + 1) * 1440,
+    })),
+    notes: [
+      ...mockTimeline.notes.map((note, index) => ({
+        id: note.sourceNoteId,
+        pitch: note.pitch,
+        startTick: index * 360,
+        durationTick: 330,
+        hand: "right" as const,
+        measure: Math.floor(index / 4) + 1,
+        beat: (index % 4) + 1,
+      })),
+      ...left.map((pitch, index) => ({
+        id: `L-${index}`,
+        pitch,
+        startTick: index * 720,
+        durationTick: 690,
+        hand: "left" as const,
+        measure: Math.floor(index / 2) + 1,
+        beat: 1,
+      })),
+    ],
+  };
 }

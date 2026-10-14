@@ -7,6 +7,8 @@ let socket: WebSocket | undefined;
 const pending: string[] = [];
 
 let lastSubtitleUtterance = "";
+// 楽譜ページを 3D 空間に浮かべる状態（ScorePages.tsx）
+const PAGE_STATES = ["importing", "analyzing", "hearing", "planning"];
 
 export function connectSocket(): void {
   if (new URLSearchParams(location.search).has("mock") || socket) return;
@@ -55,19 +57,40 @@ export function handleIncomingMessage({ type, payload }: WireMessage): void {
         "planning",
         "finished",
       ];
+      // 楽譜ページを浮かべている間（読み込み演出）は、ページが入る構図にする
+      const showingPages =
+        state.pageImageUrls.length > 0 && PAGE_STATES.includes(lessonState);
       state.set({
         lessonState,
-        camera: conversational.includes(lessonState)
-          ? "overview"
-          : state.camera,
+        camera: showingPages
+          ? "score"
+          : conversational.includes(lessonState)
+            ? "overview"
+            : state.camera,
       });
       break;
     }
     case "import.progress":
-      state.set({ lessonState: "importing" });
+      state.set({
+        // 新しい読み込みが始まったら、前の曲のページは消す
+        ...(state.lessonState === "importing" ? {} : { pageImageUrls: [] }),
+        lessonState: "importing",
+        importProgress: {
+          stage: payload.stage as "reading" | "analyzing" | "fingering",
+          ratio: Number(payload.ratio) || 0,
+        },
+      });
       break;
     case "song.ready":
-      state.set({ score: payload.score as ScoreModel });
+      state.set({
+        score: payload.score as ScoreModel,
+        pageImageUrls: Array.isArray(payload.pageImageUrls)
+          ? (payload.pageImageUrls as string[])
+          : [],
+        camera: PAGE_STATES.includes(state.lessonState)
+          ? "score"
+          : state.camera,
+      });
       break;
     case "song.analysis":
       state.set({
