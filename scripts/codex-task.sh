@@ -2,6 +2,7 @@
 # Codex にタスクを投げる。セッション ID を保存し、resume で文脈を引き継げる。
 #   新規:   scripts/codex-task.sh <name> <prompt-file>
 #   続き:   scripts/codex-task.sh <name> <prompt-file> --resume
+#   環境変数: CODEX_MODEL（既定 gpt-5.6-terra）、CODEX_EFFORT（既定 high）、CODEX_SANDBOX（read-only など）
 # ログ:     .codex-tasks/<name>.jsonl / 最終回答: .codex-tasks/<name>.last.md
 set -euo pipefail
 NAME=$1; PROMPT_FILE=$2; MODE=${3:-new}
@@ -9,7 +10,8 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd); D="$ROOT/.codex-tasks"; mkdir -p "$D"
 # デスクトップアプリ由来の環境変数（ANTHROPIC_BASE_URL 等）を持ち込まない
 CLEAN_ENV=(env -i HOME="$HOME" USER="$USER" LANG=ja_JP.UTF-8 TERM=dumb
   PATH="$HOME/.nvm/versions/node/v22.22.0/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin")
-COMMON=(-m "${CODEX_MODEL:-gpt-5.6-terra}" -c "model_reasoning_effort=\"${CODEX_EFFORT:-high}\"" --json -o "$D/$NAME.last.md")
+# CODEX_SANDBOX=read-only でレビューなどを読み取り専用に強制できる（既定は ~/.codex/config.toml の設定）
+COMMON=(${CODEX_SANDBOX:+-s "$CODEX_SANDBOX"} -m "${CODEX_MODEL:-gpt-5.6-terra}" -c "model_reasoning_effort=\"${CODEX_EFFORT:-high}\"" --json -o "$D/$NAME.last.md")
 cd "$ROOT"
 if [ "$MODE" = "--resume" ]; then
   SID=$(cat "$D/$NAME.session")
