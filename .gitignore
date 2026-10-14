@@ -1,0 +1,7 @@
+vendor/
+data/
+spikes/tts_out/
+.venv/
+__pycache__/
+node_modules/
+.codex-tasks/
