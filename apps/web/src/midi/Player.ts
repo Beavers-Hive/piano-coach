@@ -39,6 +39,8 @@ function loop(): void {
 export function startPractice(): void {
   const timeline = currentTimeline();
   if (!timeline || useAppStore.getState().running) return;
+  // お手本用（watch）の課題は演奏できない。次の課題が届くまで待つ
+  if (timeline.spec.mode === "watch") return;
   countIn(timeline);
 }
 
@@ -197,10 +199,11 @@ function playDemoNotes(timeline: ExerciseTimeline, playhead: number): void {
     cancelAnimationFrame(frame);
     stopClock();
     setTimeScale(1);
+    // お手本の後は、先生が次の課題を決めるまで待つ（開始ボタンは出さない）
     useAppStore.getState().set({
       running: false,
-      lessonState: "briefing",
-      waitingForStart: true,
+      lessonState: "reviewing",
+      waitingForStart: false,
       handsMode: "hidden",
     });
     send("demo.finished", {

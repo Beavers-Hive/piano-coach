@@ -36,6 +36,10 @@ def test_scripted_brain_end_to_end(monkeypatch):
 
         ws.send_json({"type": "demo.finished", "payload": demo["payload"]})
         practice_ready, after_demo = receive_until(ws, "exercise.ready")
+        # お手本の直後は、次の課題が決まるまで reviewing（先生が考え中）。briefing に戻してはいけない
+        # （戻すと、お手本用の watch 課題のまま演奏を始められてしまう。本物の Claude での通しテストで発覚）
+        states_after_demo = [m["payload"]["state"] for m in after_demo if m["type"] == "lesson.state"]
+        assert states_after_demo and states_after_demo[0] == "reviewing", states_after_demo
         assert practice_ready["payload"]["timeline"]["spec"]["mode"] == "wait"
         version = practice_ready["payload"]["timeline"]["exerciseVersion"]
         exercise_id = practice_ready["payload"]["timeline"]["exerciseId"]

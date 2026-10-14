@@ -49,7 +49,7 @@ class AgentAction(BaseModel):
 
 ALLOWED_STATES = {
     "hearing": {"ask", "set_plan"}, "planning": {"set_plan", "start_exercise", "demo"},
-    "briefing": {"start_exercise", "demo"}, "reviewing": {"retry", "next", "finish", "start_exercise"},
+    "briefing": {"start_exercise", "demo"}, "reviewing": {"retry", "next", "finish", "start_exercise", "demo"},
 }
 
 

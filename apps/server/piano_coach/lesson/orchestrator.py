@@ -186,7 +186,8 @@ class LessonOrchestrator:
 
     async def demo_finished(self, exercise_id: str, version: int) -> None:
         if not self.timeline or self.state != "demo" or exercise_id != self.timeline.exerciseId or version != self.exercise_version: return
-        await self.transition("briefing")
+        # お手本の課題（watch）のまま演奏を始められないよう、次の課題が決まるまでは reviewing（先生が考え中）にする
+        await self.transition("reviewing")
         action = await self._brain_turn("DEMO_FINISHED", {"exercise": self.timeline.spec.model_dump()})
         if action: await self.apply_action(action)
         else: await self.prepare_exercise(self.timeline.spec.model_copy(update={"mode": "wait"}))

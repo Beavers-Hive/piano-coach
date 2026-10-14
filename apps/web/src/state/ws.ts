@@ -4,6 +4,8 @@ import { useAppStore } from "./store";
 
 let socket: WebSocket | undefined;
 
+let lastSubtitleUtterance = "";
+
 export function connectSocket(): void {
   if (new URLSearchParams(location.search).has("mock") || socket) return;
   socket = new WebSocket(
@@ -70,9 +72,16 @@ export function handleIncomingMessage({ type, payload }: WireMessage): void {
         payload.fingers as { id: string; finger: 1 | 2 | 3 | 4 | 5 }[],
       );
       break;
-    case "agent.say":
-      state.set({ subtitle: state.subtitle + String(payload.delta) });
+    case "agent.say": {
+      // 新しい発話が始まったら字幕を入れ替える（前の字幕や状態表示に付け足さない）
+      const utteranceId = String(payload.utteranceId);
+      const continuing = utteranceId === lastSubtitleUtterance;
+      lastSubtitleUtterance = utteranceId;
+      state.set({
+        subtitle: (continuing ? state.subtitle : "") + String(payload.delta),
+      });
       break;
+    }
     case "voice.clip":
       enqueueVoice(payload as never);
       break;
