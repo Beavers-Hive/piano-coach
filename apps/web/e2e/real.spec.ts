@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 // 起動済みのサーバー（8787、本物の Claude）、TTS（8790）、vite（5173）を使う。
 // Claude の返答の文面は毎回変わるので、文言ではなく流れ（状態の遷移）と、声が Irodori で鳴ったことを検証する。
 
-const SHOTS = "test-results/real";
+const SHOTS = "test-results-real/shots";
 
 test.skip(
   !process.env.PIANO_COACH_REAL,
@@ -66,18 +66,33 @@ test("real Claude + Irodori: hearing → plan → demo → practice → feedback
   mark("課題の準備完了");
   await page.screenshot({ path: `${SHOTS}/4-briefing.png` });
 
-  // 完璧に弾く（wait モードでも play モードでも通るように、予定時刻に合わせて押す）
+  // 完璧に弾く。wait モードは次の音（和音）が揃うまで止まるので、順番に押す。play モードは予定時刻どおりに押す
   await page.evaluate(() => window.__pianoCoach?.pressKey(60));
   await page.evaluate(async () => {
     const api = window.__pianoCoach!;
     const timeline = api.getState().timeline!;
-    await new Promise((resolve) =>
-      setTimeout(resolve, timeline.countInMs + 50),
-    );
+    const sleep = (ms: number) =>
+      new Promise((resolve) => setTimeout(resolve, ms));
+    await sleep(timeline.countInMs + 50);
+    if (timeline.spec.mode === "wait") {
+      const chords = new Map<number, number[]>();
+      for (const note of timeline.notes)
+        chords.set(note.startMs, [
+          ...(chords.get(note.startMs) ?? []),
+          note.pitch,
+        ]);
+      for (const pitches of chords.values()) {
+        for (const pitch of pitches) api.pressKey(pitch, 90);
+        await sleep(120);
+        for (const pitch of pitches) api.releaseKey(pitch);
+        await sleep(80);
+      }
+      return;
+    }
     const startedAt = performance.now();
     for (const note of timeline.notes) {
       const wait = note.startMs - (performance.now() - startedAt);
-      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      if (wait > 0) await sleep(wait);
       api.pressKey(note.pitch, 90);
       setTimeout(
         () => api.releaseKey(note.pitch),

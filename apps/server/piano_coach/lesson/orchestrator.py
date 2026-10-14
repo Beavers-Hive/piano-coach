@@ -52,8 +52,11 @@ class LessonOrchestrator:
         analysis = await self._analysis(page_paths)
         await self.emit("song.analysis", analysis)
         await self.transition("hearing")
-        asyncio.create_task(self.estimate_fingering())
         action = await self._brain_turn("SONG_LOADED", self._song_payload(analysis))
+        # 運指の設計（別の Claude プロセス）は、先生の最初の発話が終わってから始める。
+        # 同時に起動すると CPU とメモリが混み合い、最初の発話の音声合成が 6〜9 秒かかって代替音声になっていた。
+        # 運指はお手本（計画の後）までに間に合えばよい。
+        asyncio.create_task(self.estimate_fingering())
         if action: await self.apply_action(action)
         else: await self.ask_fallback(0)
 

@@ -19,7 +19,7 @@ from .yomi import subtitle_text, tts_text
 log = logging.getLogger(__name__)
 
 DEFAULT_SEED = 1234
-SYNTH_TIMEOUT_S = 5.0
+SYNTH_TIMEOUT_S = float(os.environ.get("PIANO_COACH_TTS_TIMEOUT", "8.0"))  # デモでは代替の機械音声より、少し待っても Irodori の声を優先する
 DEFAULT_TTS_URL = "http://127.0.0.1:8790"
 # apps/server/piano_coach/voice/service.py -> リポジトリ直下
 _REPO_ROOT = Path(__file__).resolve().parents[4]

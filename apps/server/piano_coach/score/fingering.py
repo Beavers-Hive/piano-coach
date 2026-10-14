@@ -20,6 +20,22 @@ class FingeringViolation:
     reason: str
 
 
+def _crosses_wrongly(hand: str, previous_pitch: int, pitch: int, previous_finger: int, finger: int) -> bool:
+    """音の進む向きと指番号の向きが逆なのに、親指くぐり・指越えになっていないか。
+
+    右手は高い音ほど大きい指番号（左手は逆）。向きが逆になってよいのは、
+    親指が他の指の下をくぐる（次の指が 1）か、指が親指を越える（前の指が 1）ときだけ。
+    """
+    if pitch == previous_pitch or finger == previous_finger:
+        return False
+    pitch_up = pitch > previous_pitch
+    finger_up = finger > previous_finger
+    natural = pitch_up == finger_up if hand == "right" else pitch_up != finger_up
+    if natural:
+        return False
+    return not (finger == 1 or previous_finger == 1)
+
+
 def validate_fingering(notes: Iterable[ScoreNote], fingers: dict[str, int]) -> list[FingeringViolation]:
     notes = sorted(notes, key=lambda note: (note.hand, note.startTick, note.pitch))
     errors: list[FingeringViolation] = []
@@ -49,6 +65,8 @@ def validate_fingering(notes: Iterable[ScoreNote], fingers: dict[str, int]) -> l
             distance = abs(current.pitch - previous.pitch)
             if distance > REACH[tuple(sorted((a, b)))]:
                 errors.append(FingeringViolation(current.id, "finger stretch exceeds reach"))
+            if _crosses_wrongly(hand, previous.pitch, current.pitch, a, b):
+                errors.append(FingeringViolation(current.id, "finger order contradicts melodic direction"))
             if a == b and previous.pitch != current.pitch and current.startTick - previous.startTick < 240:
                 errors.append(FingeringViolation(current.id, "same finger repeated faster than an eighth note"))
     return errors

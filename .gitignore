@@ -5,3 +5,4 @@ spikes/tts_out/
 __pycache__/
 node_modules/
 .codex-tasks/
+data-e2e/
