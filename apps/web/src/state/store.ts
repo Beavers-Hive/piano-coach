@@ -37,6 +37,8 @@ type AppState = {
   hit?: { pitch: number; kind: HitKind; at: number };
   combo: number;
   voiceLevel: number;
+  /** 最後に Web Speech の代替音声を使った時刻（Irodori が使えなかった）。 */
+  fallbackVoiceAt?: number;
   error?: string;
   set: (patch: Partial<AppState>) => void;
   press: (pitch: number, on: boolean) => void;

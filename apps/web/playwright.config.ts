@@ -4,6 +4,8 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 60_000,
   retries: 0,
+  // WebGL のテスト（ソフトウェア描画）と同時に走らせると CPU を取り合ってタイムアウトするので、1 並列で順に実行する
+  workers: 1,
   use: {
     baseURL: "http://127.0.0.1:5173",
     trace: "retain-on-failure",

@@ -334,3 +334,20 @@ header select {
     font-size: 30px;
   }
 }
+
+.voice-ok {
+  color: #6ff0b0;
+}
+.voice-warning,
+.voice-fallback {
+  color: #ffd0d6;
+}
+.voice-fallback {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #7a1022cc;
+  font-size: 12px;
+}

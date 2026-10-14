@@ -1,3 +1,4 @@
+import { useAppStore } from "../state/store";
 import { setPianoDuck } from "./piano";
 
 export type VoiceClip = {
@@ -70,6 +71,7 @@ function speak(clip: VoiceClip) {
   });
 }
 function fallback(text: string, done: () => void) {
+  useAppStore.getState().set({ fallbackVoiceAt: performance.now() });
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = "ja-JP";
   utterance.rate = 1.03;

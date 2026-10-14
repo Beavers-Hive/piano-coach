@@ -79,6 +79,11 @@ export function Hud({
           ))}
         </aside>
       )}
+      {s.fallbackVoiceAt && (
+        <div className="voice-fallback" role="status">
+          代替音声（ブラウザ）で再生しています — Irodori を確認してください
+        </div>
+      )}
       <div className="subtitle">
         {s.subtitle ||
           (s.waitingForStart
