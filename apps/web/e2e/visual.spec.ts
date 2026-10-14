@@ -14,11 +14,14 @@ async function enterLesson(page: Page) {
   await page.waitForTimeout(2500); // カメラの移動が落ち着くまで待つ
 }
 
-test("visual: briefing, demo hands and practice render without shader errors", async ({ page }) => {
+test("visual: briefing, demo hands and practice render without shader errors", async ({
+  page,
+}) => {
   const shaderErrors: string[] = [];
   page.on("console", (message) => {
     const text = message.text();
-    if (/Shader Error|WebGLProgram|not compiled/i.test(text)) shaderErrors.push(text.slice(0, 300));
+    if (/Shader Error|WebGLProgram|not compiled/i.test(text))
+      shaderErrors.push(text.slice(0, 300));
   });
 
   await enterLesson(page);

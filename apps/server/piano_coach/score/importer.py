@@ -27,6 +27,14 @@ def _rescale(value: int, source_ppq: int) -> int:
     return round(value * 480 / source_ppq)
 
 
+def _read_meta(score_dir: Path) -> dict:
+    meta_path = score_dir / "meta.json"
+    if not meta_path.is_file():
+        return {}
+    import json
+    return json.loads(meta_path.read_text(encoding="utf-8"))
+
+
 def import_score(score_dir: Path) -> ScoreModel:
     """Build the small, contract-defined score representation from tracks 1 and 2."""
     midi_path = next(score_dir.glob("*.mid"))
@@ -37,6 +45,10 @@ def import_score(score_dir: Path) -> ScoreModel:
     ppq = midi.ticks_per_beat
     title = _header_value(ly_path, "title", score_dir.name)
     composer = _header_value(ly_path, "composer", "Unknown")
+    # meta.json があれば、表示用の日本語の曲名と作曲者で上書きする
+    meta = _read_meta(score_dir)
+    title = meta.get("title", title)
+    composer = meta.get("composer", composer)
     bpm, numerator, denominator, fifths = 120.0, 4, 4, 0
     for track in midi.tracks:
         for message in track:
@@ -111,7 +123,8 @@ class ScoreRepository:
 
     def all(self) -> list[ScoreModel]:
         if not self._scores:
-            for directory in sorted(path for path in self.assets_dir.iterdir() if path.is_dir()):
+            # meta.json の order の順（デモ曲を先頭に）。order がなければ名前順で後ろに並べる
+            for directory in sorted((path for path in self.assets_dir.iterdir() if path.is_dir()), key=lambda path: (_read_meta(path).get("order", 999), path.name)):
                 if list(directory.glob("*.mid")) and list(directory.glob("*.pdf")):
                     score = import_score(directory)
                     self._scores[score.songId] = score
