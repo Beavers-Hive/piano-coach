@@ -67,8 +67,14 @@ def validate_action(raw: dict, state: str, *, current_spec: ExerciseSpec | None 
         if current_spec is None:
             raise ValueError("retry needs a current exercise")
         action.exercise = ExerciseSpec.model_validate({**current_spec.model_dump(), **action.exercise})
+    if action.type in {"start_exercise", "retry"} and action.exercise and action.exercise.mode == "watch":
+        raise ValueError("watch requires demo action")
     if action.exercise and measure_count and action.exercise.measures[1] > measure_count:
         raise ValueError("exercise exceeds score measure range")
+    if action.plan and measure_count:
+        for step in action.plan.steps:
+            if step.exercise.measures[1] > measure_count:
+                raise ValueError("plan exercise exceeds score measure range")
     if action.type == "next" and current_spec is None:
         raise ValueError("next needs a plan/current exercise")
     return action

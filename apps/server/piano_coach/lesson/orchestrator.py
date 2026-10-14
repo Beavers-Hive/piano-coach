@@ -20,16 +20,73 @@ from piano_coach.score.model import ScoreModel
 log = logging.getLogger(__name__)
 Send = Callable[[str, dict], Awaitable[None]]
 _END = object()
+LESSON_TURN_TIMEOUT_S = 25
+ANALYSIS_TIMEOUT_S = 60
+FINGERING_CHUNK_TIMEOUT_S = 120
 
 
 class LessonOrchestrator:
     def __init__(self, send: Send, brain: TutorBrain | None = None, voice: Any | None = None) -> None:
         self.send, self.brain, self.voice = send, brain, voice
+        self._brain_factory = type(brain) if brain is not None else None
         self.state, self.score, self.plan, self.timeline = "idle", None, None, None
         self.exercise_version, self.awaiting_voice, self._step_index = 0, None, 0
         self._brain_lock, self._send_lock = asyncio.Lock(), asyncio.Lock()
         self._builder, self._queued_user_messages = ExerciseBuilder(), []
         self._attempt_counts: dict[tuple, int] = defaultdict(int)
+        self._owned_tasks: set[asyncio.Task] = set()
+        self._voice_workers: set[asyncio.Task] = set()
+        self._active_utterances: set[str] = set()
+        self._closed = False
+
+    def _own_task(self, coroutine: Any) -> asyncio.Task:
+        task = asyncio.create_task(coroutine)
+        self._owned_tasks.add(task)
+        task.add_done_callback(self._owned_tasks.discard)
+        return task
+
+    def set_brain(self, brain: TutorBrain | None) -> None:
+        self.brain = brain
+        if brain is not None:
+            self._brain_factory = type(brain)
+
+    async def _close_brain(self) -> None:
+        if self.brain is not None:
+            try:
+                await self.brain.close()
+            except Exception as error:
+                log.warning("could not close brain: %s", error)
+            self.brain = None
+
+    async def _ensure_brain(self) -> bool:
+        if self.brain is not None:
+            return True
+        if self._brain_factory is None or self._closed:
+            return False
+        try:
+            self.brain = self._brain_factory()
+            await self.brain.open()
+            return True
+        except Exception as error:
+            log.warning("could not reopen lesson brain: %s", error)
+            self.brain = None
+            return False
+
+    async def aclose(self) -> None:
+        """Cancel work owned by this connection before its WebSocket disappears."""
+        self._closed = True
+        for utterance_id in self._active_utterances:
+            cancel = getattr(self.voice, "cancel", None)
+            if cancel:
+                cancel(utterance_id)
+        tasks = [*self._owned_tasks, *self._voice_workers]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._owned_tasks.clear()
+        self._voice_workers.clear()
+        await self._close_brain()
 
     async def emit(self, kind: str, payload: dict) -> None:
         async with self._send_lock:
@@ -56,7 +113,7 @@ class LessonOrchestrator:
         # 運指の設計（別の Claude プロセス）は、先生の最初の発話が終わってから始める。
         # 同時に起動すると CPU とメモリが混み合い、最初の発話の音声合成が 6〜9 秒かかって代替音声になっていた。
         # 運指はお手本（計画の後）までに間に合えばよい。
-        asyncio.create_task(self.estimate_fingering())
+        self._own_task(self.estimate_fingering())
         if action: await self.apply_action(action)
         else: await self.ask_fallback(0)
 
@@ -77,15 +134,20 @@ class LessonOrchestrator:
         result = {"title": self.score.title, "summary": "楽譜を読み込みました。", "sections": [{"name": "全体", "measures": [1, len(self.score.measures)]}]}
         if self.brain:
             try:
-                result = await getattr(self.brain, "analyze_pages")(page_paths, {"measureCount": len(self.score.measures), "timeSignature": self.score.timeSignature.model_dump(), "bpm": self.score.bpm, "keyFifths": self.score.keyFifths})
+                async with asyncio.timeout(ANALYSIS_TIMEOUT_S):
+                    result = await getattr(self.brain, "analyze_pages")(page_paths, {"measureCount": len(self.score.measures), "timeSignature": self.score.timeSignature.model_dump(), "bpm": self.score.bpm, "keyFifths": self.score.keyFifths})
+            except TimeoutError:
+                log.warning("analysis timed out after %ss; fallback", ANALYSIS_TIMEOUT_S)
+                await self._close_brain()
             except Exception as error: log.warning("analysis failed; fallback: %s", error)
         try: cache.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
         except OSError as error: log.warning("could not cache analysis: %s", error)
         return result
 
     async def _brain_turn(self, kind: str, payload: dict) -> AgentAction | None:
-        if not self.brain: return None
+        if not await self._ensure_brain(): return None
         utterance_id, queue, saw_say = str(uuid.uuid4()), asyncio.Queue(), False
+        self._active_utterances.add(utterance_id)
         async def stream() -> AsyncIterator[str]:
             while True:
                 item = await queue.get()
@@ -98,17 +160,34 @@ class LessonOrchestrator:
                     await self.emit("voice.clip", {"utteranceId": clip.utterance_id, "seq": clip.seq, "url": clip.url, "text": clip.text, "last": clip.last})
             except Exception as error: log.warning("voice stream failed: %s", error)
         worker, raw, failed = asyncio.create_task(voice_worker()), None, False
-        async with self._brain_lock:
-            try:
-                async for event in self.brain.send(format_message(kind, payload)):
-                    if isinstance(event, SayDelta):
-                        saw_say = True
-                        await self.emit("agent.say", {"utteranceId": utterance_id, "delta": event.text, "final": False})
-                        await queue.put(event.text)
-                    elif isinstance(event, ActionReady): raw = event.action
-                    elif isinstance(event, BrainError): failed = True; log.warning("brain %s failed: %s", kind, event.reason)
-            except Exception as error: failed = True; log.warning("brain %s exception: %s", kind, error)
-        await queue.put(_END); await worker
+        self._voice_workers.add(worker)
+        try:
+            async with self._brain_lock:
+                try:
+                    async with asyncio.timeout(LESSON_TURN_TIMEOUT_S):
+                        async for event in self.brain.send(format_message(kind, payload)):
+                            if isinstance(event, SayDelta):
+                                saw_say = True
+                                await self.emit("agent.say", {"utteranceId": utterance_id, "delta": event.text, "final": False})
+                                await queue.put(event.text)
+                            elif isinstance(event, ActionReady): raw = event.action
+                            elif isinstance(event, BrainError): failed = True; log.warning("brain %s failed: %s", kind, event.reason)
+                except TimeoutError:
+                    failed = True
+                    log.warning("brain %s timed out after %ss", kind, LESSON_TURN_TIMEOUT_S)
+                    await self._close_brain()
+                except Exception as error: failed = True; log.warning("brain %s exception: %s", kind, error)
+        finally:
+            await queue.put(_END)
+            if not worker.done():
+                try:
+                    await worker
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:
+                    log.warning("voice worker failed: %s", error)
+            self._voice_workers.discard(worker)
+            self._active_utterances.discard(utterance_id)
         if saw_say: await self.emit("agent.say", {"utteranceId": utterance_id, "delta": "", "final": True})
         if failed or raw is None: return None
         try: return validate_action(raw, self.state, current_spec=self.timeline.spec if self.timeline else None, measure_count=len(self.score.measures) if self.score else None)
@@ -116,6 +195,7 @@ class LessonOrchestrator:
 
     async def _speak_fixed(self, text: str, gate: bool = False) -> str:
         utterance_id = str(uuid.uuid4())
+        self._active_utterances.add(utterance_id)
         if gate: self.awaiting_voice = utterance_id
         await self.emit("agent.say", {"utteranceId": utterance_id, "delta": text, "final": True})
         try:
@@ -126,6 +206,8 @@ class LessonOrchestrator:
         except Exception as error:
             log.warning("fixed voice fallback: %s", error)
             await self.emit("voice.clip", {"utteranceId": utterance_id, "seq": 0, "url": None, "text": text, "last": True})
+        finally:
+            self._active_utterances.discard(utterance_id)
         return utterance_id
 
     async def ask_fallback(self, index: int) -> None:
@@ -165,14 +247,24 @@ class LessonOrchestrator:
         if follow: await self.apply_action(follow)
         else: await self.begin_demo(first.model_copy(update={"mode": "watch"}))
 
-    async def prepare_exercise(self, spec: ExerciseSpec) -> None:
+    async def prepare_exercise(self, spec: ExerciseSpec) -> bool:
         assert self.score
-        self.exercise_version += 1; self.timeline = self._builder.build(self.score, spec, self.exercise_version)
+        # Build first: a bad agent request must not invalidate the current version/timeline.
+        next_version = self.exercise_version + 1
+        try:
+            timeline = self._builder.build(self.score, spec, next_version)
+        except (ValueError, TypeError) as error:
+            log.warning("exercise generation rejected: %s", error)
+            await self.emit("error", {"message": "課題を作れませんでした。前の課題を続けます。"})
+            return False
+        self.exercise_version, self.timeline = next_version, timeline
         await self.transition("briefing"); await self.emit("exercise.ready", {"timeline": self.timeline.model_dump(mode="json")})
         await self._speak_fixed(self.exercise_instruction(spec), gate=True)
+        return True
 
     async def begin_demo(self, spec: ExerciseSpec) -> None:
-        await self.prepare_exercise(spec.model_copy(update={"mode": "watch"}))
+        if not await self.prepare_exercise(spec.model_copy(update={"mode": "watch"})):
+            return
         await self.transition("demo"); await self.emit("demo.play", {"exerciseId": self.timeline.exerciseId, "exerciseVersion": self.exercise_version})
 
     def exercise_instruction(self, spec: ExerciseSpec) -> str:
@@ -240,7 +332,13 @@ class LessonOrchestrator:
         updates: list[dict] = []
         async def request(compact: str, violations: list) -> dict:
             if not self.brain: raise RuntimeError("no brain")
-            return await getattr(self.brain, "design_fingering")(compact, [f"{x.note_id}: {x.reason}" for x in violations])
+            try:
+                async with asyncio.timeout(FINGERING_CHUNK_TIMEOUT_S):
+                    return await getattr(self.brain, "design_fingering")(compact, [f"{x.note_id}: {x.reason}" for x in violations])
+            except TimeoutError:
+                log.warning("fingering chunk timed out after %ss", FINGERING_CHUNK_TIMEOUT_S)
+                await self._close_brain()
+                raise
         async def update(value: dict) -> None: updates.append(value); await self.emit("fingering.updated", value)
         try:
             await FingeringEstimator(request, update).estimate(self.score.notes, self.score.keyFifths, self.score.bpm)

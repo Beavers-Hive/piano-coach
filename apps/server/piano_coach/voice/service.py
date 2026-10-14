@@ -117,6 +117,9 @@ class VoiceService:
                 yield held
         finally:
             reader.cancel()
+            # Cancellation alone does not reap a task; a disconnected WebSocket used
+            # to leave this reader awaiting its input stream indefinitely.
+            await asyncio.gather(reader, return_exceptions=True)
             self._cancelled.discard(utterance_id)
 
     def cancel(self, utterance_id: str) -> None:

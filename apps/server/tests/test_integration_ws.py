@@ -1,6 +1,8 @@
 import os
 
+import pytest
 from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from piano_coach.api.app import create_app
 
@@ -71,3 +73,12 @@ def test_broken_brain_uses_hearing_fallback(monkeypatch):
         ws.send_json({"type": "lesson.start", "payload": {"songId": song_id}})
         ask, _ = receive_until(ws, "agent.ask")
         assert ask["payload"]["questionId"] == "experience"
+
+
+def test_websocket_rejects_untrusted_origin(monkeypatch):
+    monkeypatch.setenv("PIANO_COACH_FAKE_TTS", "1")
+    with TestClient(create_app()) as client:
+        with pytest.raises(WebSocketDisconnect) as error:
+            with client.websocket_connect("/ws", headers={"origin": "https://evil.example"}):
+                pass
+        assert error.value.code == 1008

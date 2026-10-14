@@ -19,6 +19,7 @@ from piano_coach.paths import DATA_DIR, ensure_data_dirs
 from piano_coach.score.importer import ScoreRepository, rasterize_pages
 
 log = logging.getLogger(__name__)
+ALLOWED_WS_ORIGINS = {"http://127.0.0.1:5173", "http://localhost:5173"}
 
 
 def _fake_enabled(name: str) -> bool:
@@ -88,6 +89,11 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
 
     @app.websocket("/ws")
     async def websocket(websocket: WebSocket) -> None:
+        origin = websocket.headers.get("origin")
+        # TestClient and non-browser local clients omit Origin. Browsers must be our Vite app.
+        if origin is not None and origin not in ALLOWED_WS_ORIGINS:
+            await websocket.close(code=1008)
+            return
         await websocket.accept()
         send_lock, tasks = asyncio.Lock(), set()
         brain = None
@@ -105,9 +111,9 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
                     brain = ScriptedBrain() if _fake_enabled("PIANO_COACH_FAKE_BRAIN") else ClaudeBrain()
                     try:
                         await brain.open()
-                        lesson.brain = brain
+                        lesson.set_brain(brain)
                     except Exception as error:
-                        log.warning("lesson brain unavailable: %s", error); lesson.brain = None
+                        log.warning("lesson brain unavailable: %s", error); lesson.set_brain(None)
                     pdf = repo.source_pdf(score.songId); pages = rasterize_pages(pdf, score.songId) if pdf else []
                     await lesson.start(score, [f"/api/songs/{score.songId}/pages/{index}.png" for index in range(1, len(pages)+1)], pages)
                 elif kind == "hearing.answer": await lesson.hearing_answer(payload.get("questionId", ""), payload.get("answer", ""))
@@ -130,5 +136,5 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
         finally:
             for task in tasks: task.cancel()
             if tasks: await asyncio.gather(*tasks, return_exceptions=True)
-            if brain: await brain.close()
+            await lesson.aclose()
     return app
