@@ -70,6 +70,14 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
         if not path.is_file(): raise HTTPException(status_code=404, detail="voice clip not found")
         return FileResponse(path, media_type="audio/wav")
 
+    @app.post("/api/voice/test")
+    async def voice_test() -> dict:
+        """準備画面の「先生の声をテスト」用。必ず VoiceService（Irodori）を通し、どのエンジンで鳴ったかを返す。"""
+        text = "こんにちは😊、いっしょにピアノをひいてみよう！"
+        clips = [clip async for clip in voice.speak_text("voice-test", text)]
+        urls = [clip.url for clip in clips if clip.url]
+        return {"engine": "irodori" if urls and len(urls) == len(clips) else "webspeech", "urls": urls, "text": text}
+
     @app.get("/api/health")
     async def health() -> dict:
         if _fake_enabled("PIANO_COACH_FAKE_TTS"): return {"claude": not bool(os.environ.get("ANTHROPIC_API_KEY")), "tts": True}

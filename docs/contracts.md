@@ -155,6 +155,7 @@ type LessonState = "idle" | "importing" | "analyzing" | "hearing" | "planning"
 | POST | /api/songs | multipart の `file`（PDF）→ `{ songId }`。sha256 で assets/scores の PDF と照合する。一致しない場合は 422 |
 | GET | /api/songs/{songId}/pages/{n}.png | ページ画像 |
 | GET | /api/tts/{hash}.wav | 生成済みの音声 |
+| POST | /api/voice/test | `{ engine: "irodori" \| "webspeech", urls: string[], text: string }`。準備画面の声のテスト用。必ず Irodori を通す。engine が webspeech のときは、フロントが text を Web Speech で読み、**画面に警告を出す** |
 | GET | /api/health | `{ claude: bool, tts: bool }` |
 
 ## TTS サービス（tts/server.py、ポート 8790）
