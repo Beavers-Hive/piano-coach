@@ -39,7 +39,13 @@ const ROOT_X: Record<Hand, readonly number[]> = {
   right: [-0.043, -0.022, 0, 0.021, 0.04],
   left: [0.043, 0.022, 0, -0.021, -0.04],
 };
-const ROOT_Z = [0.018, 0.003, -0.004, 0.002, 0.016] as const;
+// 指の付け根（ナックル）の、手首からの奥行き。中指がいちばん奥。親指は手首寄り。
+const ROOT_Z = [-0.035, -0.078, -0.084, -0.079, -0.07] as const;
+// 指の付け根の高さ（手首からの相対）。親指は低い位置から生える。
+const ROOT_Y = [-0.016, 0.004, 0.005, 0.004, 0.001] as const;
+// 手首の高さ（絶対値。白鍵の上面は約 0.022）と、指先から手首までの奥行き
+const WRIST_Y = 0.068;
+const WRIST_BEHIND_TIP = 0.15;
 const REST_Y = 0.055;
 const EPSILON = 0.000001;
 
@@ -158,14 +164,14 @@ function wristAt(
   tMs: number,
   hand: Hand,
 ): Vec3 {
-  if (!anchors.length) return v(hand === "right" ? 0.24 : -0.24, 0.135, 0.075);
+  if (!anchors.length) return v(hand === "right" ? 0.24 : -0.24, WRIST_Y, 0.2);
   // Every transition starts one beat before its target. Applying transitions in order keeps
   // the curve C0-continuous even when a fast passage causes two lead-in windows to overlap.
-  let point = v(anchors[0].x, 0.135, anchors[0].z + 0.072);
+  let point = v(anchors[0].x, WRIST_Y, anchors[0].z + WRIST_BEHIND_TIP);
   for (let i = 1; i < anchors.length; i++) {
     const target = anchors[i];
     const p = smooth((tMs - (target.at - beatMs)) / beatMs);
-    point = lerp(point, v(target.x, 0.135, target.z + 0.072), p);
+    point = lerp(point, v(target.x, WRIST_Y, target.z + WRIST_BEHIND_TIP), p);
   }
   return point;
 }
@@ -285,9 +291,17 @@ function solveFinger(
       ),
     ),
   );
-  const sideSign = hand === "right" ? 1 : -1;
-  const side = v(sideSign * -direction.y, sideSign * direction.x, 0);
-  const bendOffset = mul(side, Math.sin(elbowAngle) * a * (crossing ? 1.2 : 1));
+  // 曲げの向き: 指の向きに垂直で、上向き成分を持つ方向（指が上にアーチを描く）
+  const upAlong = direction.y;
+  const archRaw = v(
+    -direction.x * upAlong,
+    1 - upAlong * upAlong,
+    -direction.z * upAlong,
+  );
+  const archLength = Math.max(length(archRaw), EPSILON);
+  const arch = mul(archRaw, 1 / archLength);
+  void hand;
+  const bendOffset = mul(arch, Math.sin(elbowAngle) * a * (crossing ? 1.2 : 1));
   const first = add(
     add(root, mul(direction, Math.cos(elbowAngle) * a)),
     bendOffset,
@@ -316,15 +330,15 @@ export function computeHandPose(
       hand,
       wrist: { position: emptyWrist, rotation: v(0, 0, 0) },
       palm: {
-        center: add(emptyWrist, v(0, -0.032, -0.026)),
+        center: add(emptyWrist, v(0, 0.002, -0.042)),
         rotation: v(0, 0, 0),
       },
       fingers: [1, 2, 3, 4, 5].map((finger) => {
         const root = add(
           emptyWrist,
-          v(ROOT_X[hand][finger - 1], -0.024, ROOT_Z[finger - 1]),
+          v(ROOT_X[hand][finger - 1], ROOT_Y[finger - 1], ROOT_Z[finger - 1]),
         );
-        const tip = add(root, v(0, -0.095, 0));
+        const tip = add(root, v(0, -0.042, -0.06));
         return {
           finger: finger as Finger,
           ...solveFinger(root, tip, hand, finger as Finger, null),
@@ -359,9 +373,9 @@ export function computeHandPose(
     const motion = fingerMotion(note, tMs);
     const root = add(
       wristPosition,
-      v(ROOT_X[hand][index - 1], -0.024, ROOT_Z[index - 1]),
+      v(ROOT_X[hand][index - 1], ROOT_Y[index - 1], ROOT_Z[index - 1]),
     );
-    const fallback = add(root, v(0, -0.087, hand === "right" ? -0.004 : 0.004));
+    const fallback = add(root, v(0, -0.04, -0.062));
     const target = motion.target ?? fallback;
     const ik = solveFinger(root, target, hand, index, motion.crossing);
     fingerPoses.push({
@@ -377,11 +391,11 @@ export function computeHandPose(
     hand,
     wrist: {
       position: wristPosition,
-      rotation: v(0.17 + pronation, 0, hand === "right" ? -0.04 : 0.04),
+      rotation: v(0.05 + pronation, 0, hand === "right" ? -0.04 : 0.04),
     },
     palm: {
-      center: add(wristPosition, v(0, -0.029, -0.026)),
-      rotation: v(0.17 + pronation, 0, 0),
+      center: add(wristPosition, v(0, 0.002, -0.042)),
+      rotation: v(0.05 + pronation, 0, 0),
     },
     fingers: fingerPoses,
     next: next

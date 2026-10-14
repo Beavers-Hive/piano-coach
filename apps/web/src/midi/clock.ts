@@ -25,7 +25,10 @@ export function getPlayheadMs(now: number = performance.now()): number {
 }
 
 /** playhead = startPlayheadMs から再生を始める（カウントインは負の値から始める）。 */
-export function startClock(startPlayheadMs = 0, now: number = performance.now()): void {
+export function startClock(
+  startPlayheadMs = 0,
+  now: number = performance.now(),
+): void {
   state.running = true;
   state.startedAt = now;
   state.offsetMs = startPlayheadMs;
@@ -49,7 +52,10 @@ export function stopClock(): void {
 }
 
 /** 再生速度を変える。playhead は連続したまま、以降の進み方だけが変わる。 */
-export function setTimeScale(scale: number, now: number = performance.now()): void {
+export function setTimeScale(
+  scale: number,
+  now: number = performance.now(),
+): void {
   const current = getPlayheadMs(now);
   state.timeScale = scale;
   if (state.running) {

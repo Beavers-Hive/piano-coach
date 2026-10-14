@@ -126,6 +126,7 @@ export default function App() {
         waitingForStart: true,
         subtitle: "メヌエット ト長調 — 右手を練習しましょう",
         lessonState: "briefing",
+        camera: "play",
       });
       return;
     }

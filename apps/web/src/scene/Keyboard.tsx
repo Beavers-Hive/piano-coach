@@ -55,16 +55,16 @@ function PianoKey({ pitch }: { pitch: number }) {
                 : "#d7feff"
               : black
                 ? "#05070d"
-                : "#dfeaf1"
+                : "#e9e6df"
           }
-          roughness={black ? 0.12 : 0.22}
+          roughness={black ? 0.18 : 0.38}
           metalness={black ? 0.52 : 0.08}
           clearcoat={black ? 1 : 0.28}
-          transmission={black ? 0 : 0.08}
+          sheen={black ? 0 : 0.2}
           emissive={
             glows ? (hit?.kind === "miss" ? "#ff173b" : "#40d7ff") : "#000000"
           }
-          emissiveIntensity={glows ? 3.5 : 0}
+          emissiveIntensity={glows ? 1.6 : 0}
         />
       </RoundedBox>
     </group>

@@ -91,7 +91,7 @@ export function Hud({
           <small>PERFECT COMBO</small>
         </div>
       )}
-      {s.waitingForStart && (
+      {s.waitingForStart && s.handsMode !== "demo" && (
         <button className="start" onClick={startPractice}>
           鍵盤を押してスタート
         </button>

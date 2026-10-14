@@ -166,14 +166,21 @@ header select {
   font-size: 14px;
 }
 .subtitle {
+  /* 先生の字幕。手（画面下）とノーツ（中央）に重ならないよう、上部に置く */
   position: absolute;
-  bottom: 45px;
+  top: 84px;
   left: 50%;
   transform: translateX(-50%);
-  max-width: 85vw;
-  padding: 10px 20px;
-  border-radius: 8px;
-  background: #071226bb;
+  max-width: min(760px, 80vw);
+  padding: 12px 22px;
+  border: 1px solid #7fe6ff33;
+  border-radius: 14px;
+  background: #050b18cc;
+  backdrop-filter: blur(6px);
+  font-size: 17px;
+  line-height: 1.6;
+  text-align: center;
+  box-shadow: 0 0 30px #2bbcff22;
 }
 .start {
   position: absolute;
@@ -288,15 +295,16 @@ header select {
 }
 .fingering {
   display: grid;
-  width: 23px;
-  height: 23px;
+  width: 17px;
+  height: 17px;
+  font-size: 11px;
   place-items: center;
-  border: 2px solid #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
   border-radius: 50%;
   color: #061126;
   box-shadow: 0 0 15px currentColor;
   font:
-    800 13px ui-monospace,
+    800 11px ui-monospace,
     monospace;
 }
 @media (max-width: 700px) {

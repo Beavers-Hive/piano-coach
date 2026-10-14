@@ -1,41 +1,71 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { Vector3 } from "three";
 import { useAppStore } from "../state/store";
+import type { CameraPreset } from "../types";
+import { KEYBOARD_EXTENT } from "./keyboardLayout";
+import { exerciseRange } from "./Notes";
 
-const VIEWS: Record<
-  string,
-  { position: [number, number, number]; target: [number, number, number] }
-> = {
-  overview: { position: [0, 0.72, 1.18], target: [0, 0.02, -0.2] },
-  play: { position: [0.08, 0.46, 0.72], target: [0.04, 0.02, 0] },
-  closeup: { position: [0.18, 0.27, 0.43], target: [0.14, 0.015, 0.01] },
-  score: { position: [0, 0.86, 1.35], target: [0, 0.2, -0.25] },
-};
+type View = { position: Vector3; target: Vector3 };
+
+/**
+ * カメラの構図。play と closeup は、課題で使う音域の中心に寄せ、
+ * 音域の幅に合わせて距離を変える（狭い音域ほど寄る）。
+ */
+function viewFor(preset: CameraPreset, centerX: number, spanX: number): View {
+  const span = Math.max(0.3, spanX + 0.18);
+  switch (preset) {
+    case "play": {
+      // 手前の手（手首は鍵盤の前縁より約 13cm 手前）と、奥のハイウェイの両方が収まる構図
+      const distance = 0.42 + span * 0.55;
+      return {
+        position: new Vector3(
+          centerX,
+          0.22 + distance * 0.78,
+          0.3 + distance * 0.62,
+        ),
+        target: new Vector3(centerX, 0.02, -0.12),
+      };
+    }
+    case "closeup":
+      return {
+        position: new Vector3(centerX + 0.07, 0.24, 0.42),
+        target: new Vector3(centerX, 0.03, 0.06),
+      };
+    case "score":
+      return {
+        position: new Vector3(0, 0.62, 1.05),
+        target: new Vector3(0, 0.18, -0.4),
+      };
+    case "overview":
+    default:
+      return {
+        position: new Vector3(0, 0.52, KEYBOARD_EXTENT.width * 0.86),
+        target: new Vector3(0, 0.02, -0.3),
+      };
+  }
+}
 
 export function CameraRig() {
   const camera = useThree((state) => state.camera);
   const preset = useAppStore((state) => state.camera);
   const running = useAppStore((state) => state.running);
-  const target = useRef(new Vector3());
-  const position = useRef(new Vector3());
+  const timeline = useAppStore((state) => state.timeline);
+  const range = useMemo(() => exerciseRange(timeline?.notes ?? []), [timeline]);
+  const look = useRef(new Vector3(0, 0.02, -0.3));
+  const goal = useRef(new Vector3());
 
   useFrame(({ clock }, delta) => {
-    const view = VIEWS[preset];
-    const idle = running ? 0 : Math.sin(clock.elapsedTime * 0.33) * 0.012;
-    position.current.set(
-      view.position[0] + idle,
-      view.position[1] + idle * 0.4,
-      view.position[2],
-    );
-    target.current.set(...view.target);
-    camera.position.lerp(position.current, 1 - Math.exp((-delta / 0.8) * 5));
-    const look = new Vector3().lerpVectors(
-      camera.getWorldDirection(new Vector3()).add(camera.position),
-      target.current,
-      1 - Math.exp((-delta / 0.8) * 5),
-    );
-    camera.lookAt(look);
+    const centerX = range ? (range.minX + range.maxX) / 2 : 0;
+    const spanX = range ? range.maxX - range.minX : KEYBOARD_EXTENT.width;
+    const view = viewFor(preset, centerX, spanX);
+    // 待機中だけ、ゆっくり揺らぐ
+    const sway = running ? 0 : Math.sin(clock.elapsedTime * 0.3) * 0.01;
+    goal.current.copy(view.position).add(new Vector3(sway, sway * 0.4, 0));
+    const ease = 1 - Math.exp(-delta * 4.5); // 約 0.8 秒で追いつく
+    camera.position.lerp(goal.current, ease);
+    look.current.lerp(view.target, ease);
+    camera.lookAt(look.current);
   });
   return null;
 }

@@ -35,9 +35,25 @@ export function handleIncomingMessage({ type, payload }: WireMessage): void {
   if (isStaleVersion(payload) && type !== "exercise.ready") return;
 
   switch (type) {
-    case "lesson.state":
-      state.set({ lessonState: payload.state as typeof state.lessonState });
+    case "lesson.state": {
+      const lessonState = payload.state as typeof state.lessonState;
+      // 会話中（ヒアリングや計画）は全体、課題が始まったら演奏用の構図に寄せる
+      const conversational = [
+        "idle",
+        "importing",
+        "analyzing",
+        "hearing",
+        "planning",
+        "finished",
+      ];
+      state.set({
+        lessonState,
+        camera: conversational.includes(lessonState)
+          ? "overview"
+          : state.camera,
+      });
       break;
+    }
     case "import.progress":
       state.set({ lessonState: "importing" });
       break;
@@ -72,6 +88,7 @@ export function handleIncomingMessage({ type, payload }: WireMessage): void {
         waitingForStart: true,
         lessonState: "briefing",
         combo: 0,
+        camera: "play",
       });
       break;
     case "demo.play":

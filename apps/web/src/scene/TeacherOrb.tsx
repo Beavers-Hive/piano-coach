@@ -35,9 +35,9 @@ export function TeacherOrb() {
   });
 
   return (
-    <group position={[0, 0.28, -0.33]}>
+    <group position={[-0.34, 0.3, -0.75]}>
       <mesh ref={mesh} material={material}>
-        <sphereGeometry args={[0.045, 48, 32]} />
+        <sphereGeometry args={[0.035, 48, 32]} />
       </mesh>
       {subtitle && (
         <Html position={[0, 0.09, 0]} center distanceFactor={1.2}>

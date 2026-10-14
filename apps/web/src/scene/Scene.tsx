@@ -24,14 +24,14 @@ export function PianoScene() {
       shadows
       dpr={[1, 2]}
       camera={{ position: [0, 0.72, 1.18], fov: 38 }}
-      gl={{ toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.35 }}
+      gl={{ toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.0 }}
     >
       <color attach="background" args={["#03050d"]} />
-      <fog attach="fog" args={["#03050d", 1.1, 3.1]} />
-      <ambientLight intensity={0.3} />
+      <fog attach="fog" args={["#03050d", 0.9, 2.4]} />
+      <ambientLight intensity={0.15} />
       <spotLight
         position={[0, 1.2, 0.5]}
-        intensity={35}
+        intensity={9}
         angle={0.5}
         penumbra={1}
         castShadow
@@ -87,8 +87,13 @@ export function PianoScene() {
       </Environment>
       <CameraRig />
       <EffectComposer>
-        <Bloom intensity={1.35} luminanceThreshold={0.35} mipmapBlur />
-        <ChromaticAberration offset={new Vector2(0.0007, 0.0007)} />
+        <Bloom
+          intensity={1.1}
+          luminanceThreshold={0.9}
+          luminanceSmoothing={0.15}
+          mipmapBlur
+        />
+        <ChromaticAberration offset={new Vector2(0.0004, 0.0004)} />
         <Vignette eskil={false} offset={0.16} darkness={0.78} />
       </EffectComposer>
     </Canvas>

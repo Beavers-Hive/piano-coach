@@ -22,15 +22,19 @@ type HandsStoreSnapshot = {
 };
 
 const vertexShader = /* glsl */ `
-  attribute vec3 instanceColor;
+  // instanceColor と instanceMatrix は three.js が自動で宣言する（自前で宣言すると二重定義でコンパイルに失敗する）
   varying vec3 vWorldPosition;
   varying vec3 vWorldNormal;
   varying vec3 vInstanceColour;
   void main() {
-    vInstanceColour = instanceColor;
+    #ifdef USE_INSTANCING_COLOR
+      vInstanceColour = instanceColor;
+    #else
+      vInstanceColour = vec3(1.0);
+    #endif
     vec4 world = modelMatrix * instanceMatrix * vec4(position, 1.0);
     vWorldPosition = world.xyz;
-    vWorldNormal = normalize(mat3(modelMatrix * instanceMatrix) * normal);
+    vWorldNormal = mat3(modelMatrix * instanceMatrix) * normal;
     gl_Position = projectionMatrix * viewMatrix * world;
   }
 `;
@@ -43,12 +47,23 @@ const fragmentShader = /* glsl */ `
   float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453123); }
   void main() {
     vec3 eye = normalize(cameraPosition - vWorldPosition);
-    float fresnel = pow(1.0 - max(0.0, dot(normalize(vWorldNormal), eye)), 2.3);
+    // 大きさ 0 で隠している節は法線の長さが 0 になる。そのまま normalize すると NaN になり、
+    // Bloom を通じて画面全体が黒くなるので、長さを確かめてから正規化する。
+    float normalLength = length(vWorldNormal);
+    if (normalLength < 1e-6) discard;
+    vec3 normal = vWorldNormal / normalLength;
+    float fresnel = pow(clamp(1.0 - dot(normal, eye), 0.0, 1.0), 2.3);
     float scan = 0.73 + 0.27 * sin(vWorldPosition.y * 310.0 - uTime * 5.0);
     float shimmer = 0.87 + 0.13 * hash(floor(vWorldPosition * 180.0) + floor(uTime * 9.0));
-    vec3 cyan = vec3(0.08, 0.84, 1.0);
-    vec3 colour = mix(cyan, vInstanceColour, 0.48) * (0.48 + fresnel * 2.1) * scan * shimmer;
-    gl_FragColor = vec4(colour, uOpacity * (0.11 + fresnel * 0.72) * scan);
+    // 白鍵の上でも見えるように、本体は濃い青の半透明、縁は明るいシアンで光らせる（通常の合成）
+    vec3 deep = vec3(0.02, 0.10, 0.22);
+    vec3 cyan = vec3(0.25, 0.9, 1.0);
+    vec3 rim = mix(cyan, vInstanceColour, 0.35) * (1.2 + fresnel * 2.6);
+    vec3 colour = mix(deep, rim, clamp(fresnel * 1.4, 0.0, 1.0)) * scan * shimmer;
+    float alpha = uOpacity * (0.55 + fresnel * 0.45) * (0.85 + 0.15 * scan);
+    if (any(isnan(colour)) || isnan(alpha)) discard;
+    colour = clamp(colour, 0.0, 8.0);
+    gl_FragColor = vec4(colour, clamp(alpha, 0.0, 1.0));
   }
 `;
 
@@ -69,7 +84,7 @@ function HologramMaterial({
       fragmentShader={fragmentShader}
       transparent
       depthWrite={false}
-      blending={THREE.AdditiveBlending}
+      blending={THREE.NormalBlending}
       toneMapped={false}
       vertexColors
     />
@@ -210,6 +225,9 @@ export function Hands() {
         material.uniforms.uOpacity.value = opacity;
       }
     }
+    // 手のひらは指より目立たせない（主役は指の動き）
+    if (palmMaterial.current)
+      palmMaterial.current.uniforms.uOpacity.value = opacity * 0.28;
     const segments = segmentRef.current;
     const joints = jointRef.current;
     const palms = palmRef.current;
@@ -238,10 +256,10 @@ export function Hands() {
         pose.palm.rotation.y,
         pose.palm.rotation.z,
       );
-      dummy.scale.set(0.105, 0.027, 0.078);
+      dummy.scale.set(0.085, 0.012, 0.095); // 平たい楕円体の手のひら（幅・厚み・奥行き）
       dummy.updateMatrix();
       palms.setMatrixAt(handIndex, dummy.matrix);
-      colour.set("#42dfff").multiplyScalar(dim);
+      colour.set("#1f6f99").multiplyScalar(dim * 0.6); // 手のひらは指より控えめに光らせる
       palms.setColorAt(handIndex, colour);
 
       updateGuide(handIndex, pose, offset, guidePositions, guideColours, dim);
@@ -350,7 +368,7 @@ export function Hands() {
         args={[undefined, undefined, 2]}
         frustumCulled={false}
       >
-        <boxGeometry args={[1, 1, 1]} />
+        <sphereGeometry args={[0.5, 32, 16]} />
         <HologramMaterial materialRef={palmMaterial} />
       </instancedMesh>
       <instancedMesh
@@ -413,7 +431,7 @@ export function Hands() {
             ref={(node) => {
               badgeRefs.current[handIndex * 5 + fingerIndex] = node;
             }}
-            scale={[0.04, 0.04, 1]}
+            scale={[0.022, 0.022, 1]}
           >
             <spriteMaterial
               map={textures[fingerIndex]}
