@@ -19,7 +19,10 @@ test("fake-brain lesson completes a guided wait-mode attempt", async ({
   await page.getByRole("button", { name: "音声を有効にして準備する" }).click();
   await page.getByRole("button", { name: "レッスンへ進む" }).click();
   const songSelect = page.locator('select[aria-label="曲を選択"]');
-  await expect(songSelect.locator("option")).toHaveCount(3);
+  // サーバー起動直後の最初の曲一覧の取得は、楽譜の読み込みで数秒かかることがある
+  await expect(songSelect.locator("option")).toHaveCount(3, {
+    timeout: 30_000,
+  });
   await songSelect.selectOption({
     label: "メヌエット ト長調 — ペツォールト（伝 J.S.バッハ）",
   });
