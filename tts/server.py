@@ -57,6 +57,10 @@ MAX_TEXT_CHARS = 400
 _runtime: InferenceRuntime | None = None
 # MPS で同時に推論しないため、合成は 1 本ずつ直列に処理する。
 _lock = asyncio.Lock()
+# 最後に合成した時刻。待機中にモデルがスワップへ追い出されると、次の 1 文に 30 秒かかった（メモリ逼迫時）。
+# KEEPALIVE_S 秒以上合成していなければ、短い合成をして、モデルをメモリに留めておく。
+_last_synth = time.monotonic()
+KEEPALIVE_S = float(os.environ.get("TTS_KEEPALIVE_S", "20"))
 
 
 class SynthesizeRequest(BaseModel):
@@ -93,7 +97,21 @@ async def lifespan(app: FastAPI):
     t = time.perf_counter()
     await asyncio.to_thread(_synth_wav_bytes, "ウォームアップです。", DEFAULT_SEED)
     print(f"[tts] warmup done in {time.perf_counter() - t:.1f}s; ready on {HOST}:{PORT}", flush=True)
+    keepalive = asyncio.create_task(_keepalive()) if KEEPALIVE_S > 0 else None
     yield
+    if keepalive:
+        keepalive.cancel()
+
+
+async def _keepalive() -> None:
+    global _last_synth
+    while True:
+        await asyncio.sleep(5)
+        if time.monotonic() - _last_synth < KEEPALIVE_S or _lock.locked():
+            continue
+        async with _lock:
+            await asyncio.to_thread(_synth_wav_bytes, "はい。", DEFAULT_SEED)
+            _last_synth = time.monotonic()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -119,9 +137,11 @@ async def synthesize(body: SynthesizeRequest):
     if len(text) > MAX_TEXT_CHARS:
         raise HTTPException(status_code=422, detail=f"text too long (>{MAX_TEXT_CHARS})")
     seed = DEFAULT_SEED if body.seed is None else body.seed
+    global _last_synth
     async with _lock:
         t = time.perf_counter()
         wav = await asyncio.to_thread(_synth_wav_bytes, text, seed)
+        _last_synth = time.monotonic()
         print(f"[tts] {time.perf_counter() - t:.2f}s chars={len(text)} {text[:30]!r}", flush=True)
     return Response(content=wav, media_type="audio/wav")
 

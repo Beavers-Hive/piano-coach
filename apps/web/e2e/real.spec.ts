@@ -31,6 +31,8 @@ test("real Claude + Irodori: hearing → plan → demo → practice → feedback
   const songSelect = page.locator('select[aria-label="曲を選択"]');
   await songSelect.selectOption({ index: 1 });
   mark("曲を選択");
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: `${SHOTS}/0-import.png` });
 
   // ヒアリング: 質問が出るたびに最初の選択肢を選ぶ（Claude が聞くのは最大 2 問）
   for (let round = 0; round < 3; round++) {
