@@ -1,4 +1,3 @@
-import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import { Mesh, ShaderMaterial } from "three";
@@ -9,7 +8,6 @@ const fragmentShader = `uniform float uTime; uniform float uLevel; varying vec3 
 
 export function TeacherOrb() {
   const mesh = useRef<Mesh>(null);
-  const subtitle = useAppStore((state) => state.subtitle);
   const level = useAppStore((state) => state.voiceLevel);
   const material = useMemo(
     () =>
@@ -39,11 +37,7 @@ export function TeacherOrb() {
       <mesh ref={mesh} material={material}>
         <sphereGeometry args={[0.035, 48, 32]} />
       </mesh>
-      {subtitle && (
-        <Html position={[0, 0.09, 0]} center distanceFactor={1.2}>
-          <div className="orb-subtitle">{subtitle}</div>
-        </Html>
-      )}
+      {/* 字幕は画面上部（Hud）に一本化する。ここにも出すと二重に表示される */}
     </group>
   );
 }
