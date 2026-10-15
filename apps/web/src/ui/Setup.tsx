@@ -4,7 +4,7 @@ import { unlockPiano } from "../audio/piano";
 import { selectMidi } from "../midi/MidiInput";
 import { useAppStore } from "../state/store";
 import { LogoMark } from "./icons";
-type VoiceTestResult = { engine: "irodori" | "webspeech" };
+type VoiceTestResult = { engine: "google" | "irodori" | "webspeech" };
 
 /** 準備画面の声のテスト。必ずサーバー経由で Irodori を通し、どちらの声で鳴ったかを返す。 */
 async function testVoice(report: (result: VoiceTestResult) => void) {
@@ -16,11 +16,11 @@ async function testVoice(report: (result: VoiceTestResult) => void) {
   try {
     const response = await fetch("/api/voice/test", { method: "POST" });
     const data = (await response.json()) as {
-      engine: "irodori" | "webspeech";
+      engine: "google" | "irodori" | "webspeech";
       urls: string[];
       text: string;
     };
-    if (data.engine === "irodori") {
+    if (data.engine !== "webspeech") {
       for (const url of data.urls) {
         const audio = new Audio(url);
         await audio.play();
@@ -190,15 +190,15 @@ export function Setup({ onBegin }: { onBegin: () => void }) {
           <Step
             index={3}
             title="先生の声"
-            done={voiceResult?.engine === "irodori"}
-            detail="Irodori（先生の声）で短い文を読み上げます。代わりのブラウザの声になった場合は、声のサーバーを確認してください。"
+            done={Boolean(voiceResult && voiceResult.engine !== "webspeech")}
+            detail="先生の声で短い文を読み上げ、音声の準備を確認します。"
             status={
               <Chip
                 tone={
                   voiceBusy
                     ? "busy"
                     : voiceResult
-                      ? voiceResult.engine === "irodori"
+                      ? voiceResult.engine !== "webspeech"
                         ? "ok"
                         : "warn"
                       : ttsTone
@@ -207,8 +207,8 @@ export function Setup({ onBegin }: { onBegin: () => void }) {
                 {voiceBusy
                   ? "再生中"
                   : voiceResult
-                    ? voiceResult.engine === "irodori"
-                      ? "Irodori で再生"
+                    ? voiceResult.engine !== "webspeech"
+                      ? "先生の声で再生"
                       : "代替の声"
                     : !health
                       ? "確認中"
@@ -225,18 +225,18 @@ export function Setup({ onBegin }: { onBegin: () => void }) {
             >
               先生の声をテスト
             </button>
-            {voiceResult && voiceResult.engine !== "irodori" && (
+            {voiceResult && voiceResult.engine === "webspeech" && (
               <p role="status" className="voice-warning">
-                Irodori に接続できていません（ブラウザの音声で代替中）
+                先生の音声を取得できませんでした（ブラウザの音声で代替中）
               </p>
             )}
           </Step>
 
           <Step
             index={4}
-            title="先生（Claude）"
+            title="先生（Gemini）"
             done={Boolean(health?.claude)}
-            detail="ヒアリング、指導計画、講評を担当します。サブスクでログインした Claude Code を使います。"
+            detail="経験や目標に合わせて、練習計画と次の課題を考えます。"
             status={
               <Chip tone={claudeTone}>
                 {!health ? "確認中" : health.claude ? "接続中" : "未接続"}

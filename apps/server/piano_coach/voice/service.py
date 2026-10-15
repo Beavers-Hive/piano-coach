@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 import httpx
+from piano_coach.paths import DATA_DIR
 
 from .splitter import SentenceSplitter
 from .yomi import subtitle_text, tts_text
@@ -23,7 +24,7 @@ SYNTH_TIMEOUT_S = float(os.environ.get("PIANO_COACH_TTS_TIMEOUT", "8.0"))  # デ
 DEFAULT_TTS_URL = "http://127.0.0.1:8790"
 # apps/server/piano_coach/voice/service.py -> リポジトリ直下
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-DEFAULT_CACHE_DIR = _REPO_ROOT / "data" / "tts"
+DEFAULT_CACHE_DIR = DATA_DIR / "tts"
 
 WARMUP_PHRASES = [
     "ナイス！",
@@ -55,6 +56,8 @@ _END = object()
 
 
 class VoiceService:
+    engine = "irodori"
+    cache_namespace = ""
     def __init__(
         self,
         tts_url: str | None = None,
@@ -170,7 +173,7 @@ class VoiceService:
 
     async def _synthesize(self, tts_str: str) -> str | None:
         """キャッシュを確認し、無ければ TTS サーバーで合成する。失敗・タイムアウトは None。"""
-        key = cache_key(tts_str, self.seed)
+        key = cache_key(f"{self.cache_namespace}\n{tts_str}" if self.cache_namespace else tts_str, self.seed)
         path = self._path(key)
         url = f"/api/tts/{key}.wav"
         if path.exists() and path.stat().st_size > 0:

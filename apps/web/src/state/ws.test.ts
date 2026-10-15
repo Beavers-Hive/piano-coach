@@ -23,6 +23,31 @@ describe("websocket receiver", () => {
     expect(useAppStore.getState().camera).toBe("play");
   });
 
+  it("does not offer practice start while the demonstration is being prepared", () => {
+    handleIncomingMessage({
+      type: "exercise.ready",
+      payload: {
+        timeline: {
+          ...mockTimeline,
+          exerciseVersion: 3,
+          spec: { ...mockTimeline.spec, mode: "watch" },
+        },
+      },
+    });
+    expect(useAppStore.getState().waitingForStart).toBe(false);
+    handleIncomingMessage({
+      type: "exercise.ready",
+      payload: {
+        timeline: {
+          ...mockTimeline,
+          exerciseVersion: 4,
+          spec: { ...mockTimeline.spec, mode: "wait" },
+        },
+      },
+    });
+    expect(useAppStore.getState().waitingForStart).toBe(true);
+  });
+
   it("replaces the subtitle when a new utterance starts", () => {
     useAppStore.getState().set({ subtitle: "演奏中" });
     handleIncomingMessage({

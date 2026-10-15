@@ -1,0 +1,17 @@
+.git
+.gitignore
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/test-results*
+**/playwright-report
+apps/web/dist
+data*
+vendor
+spikes
+tts
+.env*
+**/.env*
+**/*credentials*.json
+**/*service-account*.json

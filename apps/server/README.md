@@ -1,4 +1,6 @@
-# サーバー（Codex）
+# サーバー（Gemini / Google Cloud）
+
+> **Google Cloud版の標準起動はGeminiです。** このブランチでは`GOOGLE_CLOUD_PROJECT`とADC認証を指定して`uv run piano-coach-server`を実行します。声はCloud Text-to-Speech。以下は従来のCodex版の記録です。現在の構成は[docs/cloud-run.md](../../docs/cloud-run.md)を参照してください。
 
 先生との対話・楽譜画像の解析・運指設計は Codex CLI で実行する。
 事前に `codex login` で ChatGPT にログインする。

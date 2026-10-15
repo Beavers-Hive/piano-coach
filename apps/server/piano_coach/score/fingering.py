@@ -103,17 +103,19 @@ def compact_fingering_input(notes: list[ScoreNote], key_fifths: int, bpm: float)
 
 
 class FingeringEstimator:
-    """Batches the first eight bars before the remainder and permits exactly one repair."""
+    """Generate bounded four-bar batches from the start; permit one repair per batch."""
     def __init__(self, request: FingeringRequest, emit: FingeringUpdate) -> None:
         self.request, self.emit = request, emit
 
     async def estimate(self, score_notes: list[ScoreNote], key_fifths: int, bpm: float) -> None:
         max_measure = max((note.measure for note in score_notes), default=0)
-        ranges = [(1, min(8, max_measure)), (9, max_measure)] if max_measure > 8 else [(1, max_measure)]
+        ranges = [(start, min(start + 3, max_measure)) for start in range(1, max_measure + 1, 4)]
         for start, end in ranges:
             if start > end:
                 continue
             notes = [note for note in score_notes if start <= note.measure <= end]
+            if not notes:
+                continue
             violations: list[FingeringViolation] = []
             fingers: dict[str, int] = {}
             events: list[FingeringEvent] = []

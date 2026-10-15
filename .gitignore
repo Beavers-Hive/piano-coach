@@ -6,3 +6,9 @@ __pycache__/
 node_modules/
 .codex-tasks/
 data-e2e/
+dist/
+*.tsbuildinfo
+test-results*/
+playwright-report/
+.env
+.env.*

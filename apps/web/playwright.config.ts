@@ -7,6 +7,7 @@ export default defineConfig({
   // WebGL のテスト（ソフトウェア描画）と同時に走らせると CPU を取り合ってタイムアウトするので、1 並列で順に実行する
   workers: 1,
   use: {
+    channel: process.env.PIANO_COACH_BROWSER_CHANNEL,
     baseURL: "http://127.0.0.1:5173",
     trace: "retain-on-failure",
     ...devices["Desktop Chrome"],

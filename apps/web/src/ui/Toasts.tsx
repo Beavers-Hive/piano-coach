@@ -31,7 +31,7 @@ export function Toasts() {
     if (fallbackVoiceAt)
       push(
         "warn",
-        "代替音声（ブラウザ）で再生しています。Irodori を確認してください。",
+        "代替音声（ブラウザ）で再生しています。先生の音声を取得できませんでした。",
       );
   }, [fallbackVoiceAt]);
 

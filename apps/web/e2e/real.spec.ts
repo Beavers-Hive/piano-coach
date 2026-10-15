@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-// 本物の Claude と Irodori を使った通しテスト。サブスクの利用枠を使うので、普段は実行しない。
+// 本物の Gemini と Cloud TTS を使った通しテスト。サブスクの利用枠を使うので、普段は実行しない。
 //   PIANO_COACH_REAL=1 npx playwright test -c playwright.real.config.ts
-// 起動済みのサーバー（8787、本物の Claude）、TTS（8790）、vite（5173）を使う。
-// Claude の返答の文面は毎回変わるので、文言ではなく流れ（状態の遷移）と、声が Irodori で鳴ったことを検証する。
+// 起動済みのサーバー（8787、本物の Gemini）、TTS（8790）、vite（5173）を使う。
+// Gemini の返答の文面は毎回変わるので、文言ではなく流れ（状態の遷移）と、声が Cloud TTS で鳴ったことを検証する。
 
 const SHOTS = "test-results-real/shots";
 
@@ -12,7 +12,7 @@ test.skip(
   "PIANO_COACH_REAL=1 のときだけ実行する",
 );
 
-test("real Claude + Irodori: hearing → plan → demo → practice → feedback", async ({
+test("real Gemini + Cloud TTS: hearing → plan → demo → practice → feedback", async ({
   page,
 }) => {
   test.setTimeout(6 * 60_000);
@@ -34,7 +34,7 @@ test("real Claude + Irodori: hearing → plan → demo → practice → feedback
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${SHOTS}/0-import.png` });
 
-  // ヒアリング: 質問が出るたびに最初の選択肢を選ぶ（Claude が聞くのは最大 2 問）
+  // ヒアリング: 質問が出るたびに最初の選択肢を選ぶ（Gemini が聞くのは最大 2 問）
   for (let round = 0; round < 3; round++) {
     const question = page.locator(".question");
     const plan = page.locator(".plan");
@@ -117,7 +117,7 @@ test("real Claude + Irodori: hearing → plan → demo → practice → feedback
     Boolean(window.__pianoCoach?.getState().fallbackVoiceAt),
   );
   mark(
-    `Irodori のクリップ数: ${ttsClips.length}、代替音声: ${fallbackUsed ? "あり" : "なし"}`,
+    `Cloud TTS のクリップ数: ${ttsClips.length}、代替音声: ${fallbackUsed ? "あり" : "なし"}`,
   );
   console.log(log.join("\n"));
   expect(ttsClips.length).toBeGreaterThan(0);

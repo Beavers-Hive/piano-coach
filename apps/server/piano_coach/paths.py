@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 SERVER_ROOT = Path(__file__).resolve().parents[1]
-REPO_ROOT = SERVER_ROOT.parents[1]
+REPO_ROOT = Path(os.environ.get("PIANO_COACH_ROOT") or SERVER_ROOT.parents[1])
 ASSETS_DIR = REPO_ROOT / "assets" / "scores"
 # E2E のフェイクサーバーは別のフォルダを使う（運指などのキャッシュが本番に混ざらないように）
 def _default_data_dir() -> Path:

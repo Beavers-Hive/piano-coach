@@ -6,18 +6,22 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 
-from piano_coach.brain.codex import CodexBrain, check_subscription_environment
+from piano_coach.brain.gemini import GeminiBrain, DEFAULT_MODEL, DEFAULT_ANALYSIS_MODEL, DEFAULT_FINGERING_MODEL, configured
 from piano_coach.brain.scripted import ScriptedBrain
 from piano_coach.exercise.notation import MUSICXML_MEDIA_TYPE, timeline_to_musicxml
 from piano_coach.exercise.registry import ExerciseTimelineCache
 from piano_coach.lesson.fakes import FakeVoiceService
 from piano_coach.lesson.orchestrator import LessonOrchestrator
-from piano_coach.paths import DATA_DIR, ensure_data_dirs
+from piano_coach.paths import DATA_DIR, REPO_ROOT, ensure_data_dirs
+from piano_coach.voice.google import GoogleVoiceService
+from piano_coach.voice.service import VoiceService
 from piano_coach.score.importer import ScoreRepository, rasterize_pages
 
 log = logging.getLogger(__name__)
@@ -31,11 +35,15 @@ def _fake_enabled(name: str) -> bool:
 def create_app(repository: ScoreRepository | None = None) -> FastAPI:
     repo = repository or ScoreRepository()
     exercises = ExerciseTimelineCache(capacity=20)
-    voice = FakeVoiceService() if _fake_enabled("PIANO_COACH_FAKE_TTS") else __import__("piano_coach.voice", fromlist=["VoiceService"]).VoiceService()
+    if _fake_enabled("PIANO_COACH_FAKE_TTS"):
+        voice = FakeVoiceService()
+    elif os.environ.get("PIANO_COACH_VOICE_PROVIDER", "google") == "irodori":
+        voice = VoiceService()
+    else:
+        voice = GoogleVoiceService()
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        check_subscription_environment()
         ensure_data_dirs()
         warmup = asyncio.create_task(voice.warmup_phrases())
         try:
@@ -94,21 +102,33 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
         text = "こんにちは😊、いっしょにピアノをひいてみよう！"
         clips = [clip async for clip in voice.speak_text("voice-test", text)]
         urls = [clip.url for clip in clips if clip.url]
-        return {"engine": "irodori" if urls and len(urls) == len(clips) else "webspeech", "urls": urls, "text": text}
+        return {"engine": getattr(voice, "engine", "irodori") if urls and len(urls) == len(clips) else "webspeech", "urls": urls, "text": text}
 
     @app.get("/api/health")
     async def health() -> dict:
-        if _fake_enabled("PIANO_COACH_FAKE_TTS"): return {"claude": not bool(os.environ.get("ANTHROPIC_API_KEY")), "tts": True}
-        try:
-            async with httpx.AsyncClient(timeout=.5) as client: tts_ok = (await client.get("http://127.0.0.1:8790/health")).is_success
-        except httpx.HTTPError: tts_ok = False
-        return {"claude": not bool(os.environ.get("ANTHROPIC_API_KEY")), "tts": tts_ok}
+        if _fake_enabled("PIANO_COACH_FAKE_TTS"):
+            tts_ok = True
+        elif getattr(voice, "engine", "") == "google":
+            tts_ok = configured()
+        else:
+            try:
+                async with httpx.AsyncClient(timeout=.5) as client: tts_ok = (await client.get(f"{voice.tts_url}/health")).is_success
+            except httpx.HTTPError: tts_ok = False
+        # Keep legacy bool keys for existing clients; readiness is configuration, not a paid inference probe.
+        return {"claude": _fake_enabled("PIANO_COACH_FAKE_BRAIN") or configured(), "tts": tts_ok,
+                "brainProvider": "scripted" if _fake_enabled("PIANO_COACH_FAKE_BRAIN") else "gemini",
+                "model": os.environ.get("PIANO_COACH_GEMINI_MODEL", DEFAULT_MODEL),
+                "analysisModel": os.environ.get("PIANO_COACH_GEMINI_ANALYSIS_MODEL", DEFAULT_ANALYSIS_MODEL),
+                "fingeringModel": os.environ.get("PIANO_COACH_GEMINI_FINGERING_MODEL", DEFAULT_FINGERING_MODEL),
+                "ttsProvider": getattr(voice, "engine", "fake")}
 
     @app.websocket("/ws")
     async def websocket(websocket: WebSocket) -> None:
         origin = websocket.headers.get("origin")
         # TestClient and non-browser local clients omit Origin. Browsers must be our Vite app.
-        if origin is not None and origin not in ALLOWED_WS_ORIGINS:
+        allowed = ALLOWED_WS_ORIGINS | set(filter(None, os.environ.get("PIANO_COACH_ALLOWED_ORIGINS", "").split(",")))
+        same_host = origin is not None and urlparse(origin).scheme in {"http", "https"} and urlparse(origin).netloc == websocket.headers.get("host")
+        if origin is not None and origin not in allowed and not same_host:
             await websocket.close(code=1008)
             return
         await websocket.accept()
@@ -125,7 +145,7 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
                     score = repo.get(payload.get("songId", ""))
                     if not score: await send("error", {"message": "曲が見つかりません"}); return
                     if brain: await brain.close()
-                    brain = ScriptedBrain() if _fake_enabled("PIANO_COACH_FAKE_BRAIN") else CodexBrain()
+                    brain = ScriptedBrain() if _fake_enabled("PIANO_COACH_FAKE_BRAIN") else GeminiBrain()
                     try:
                         await brain.open()
                         lesson.set_brain(brain)
@@ -154,4 +174,7 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
             for task in tasks: task.cancel()
             if tasks: await asyncio.gather(*tasks, return_exceptions=True)
             await lesson.aclose()
+    web_dist = Path(os.environ.get("PIANO_COACH_WEB_DIST") or REPO_ROOT / "apps" / "web" / "dist")
+    if web_dist.is_dir():
+        app.mount("/", StaticFiles(directory=web_dist, html=True), name="web")
     return app

@@ -6,7 +6,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi",
   "uvicorn[standard]",
-  "claude-agent-sdk==0.2.166",
+  "google-auth[requests]>=2.40,<3",
   "pydantic",
   "mido",
   "pypdfium2",
@@ -15,6 +15,9 @@ dependencies = [
   "python-multipart",
   "music21>=10.5.0",
 ]
+
+[project.optional-dependencies]
+legacy = ["claude-agent-sdk==0.2.166"]
 
 [project.scripts]
 piano-coach-server = "piano_coach.main:run"
