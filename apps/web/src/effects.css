@@ -105,6 +105,223 @@
   }
 }
 
+/* ---------- 再開カード（前回の続きから） ----------
+   画面の中央に、背景を少し暗くして出す。曲の導入のカードと同じ、小さな見出し・細い罫線・明朝の曲名。
+   主のボタンは単色の真鍮、副のボタンは細い線だけ。 */
+.resume-scrim {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: radial-gradient(
+    ellipse 70% 70% at 50% 48%,
+    rgba(7, 6, 5, 0.62),
+    rgba(7, 6, 5, 0.82)
+  );
+  animation: scrim-in 0.4s ease-out backwards;
+}
+.resume-scrim.leaving {
+  pointer-events: none;
+  animation: scrim-out 0.26s ease-in forwards;
+}
+.resume-card {
+  width: min(500px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 36px 42px 34px;
+  border-top: 1px solid var(--brass);
+  border-bottom: 1px solid var(--line);
+  background: rgba(14, 13, 11, 0.97);
+  box-shadow: var(--shadow-l);
+  scrollbar-width: none;
+  animation: resume-in 0.55s 0.05s var(--ease) backwards;
+}
+.resume-scrim.leaving .resume-card {
+  animation: resume-out 0.26s ease-in forwards;
+}
+.resume-kicker {
+  margin: 0;
+  color: var(--brass);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+}
+.resume-rule {
+  display: block;
+  width: 40px;
+  height: 1px;
+  margin: 14px 0 22px;
+  background: var(--brass);
+}
+.resume-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(30px, 3.4vw, 40px);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 0.08em;
+}
+.resume-composer {
+  margin: 8px 0 0;
+  color: var(--ink-2);
+  font-family: var(--serif);
+  font-size: 15px;
+  letter-spacing: 0.1em;
+}
+.resume-progress {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.resume-step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  column-gap: 14px;
+  margin: 0;
+}
+.resume-step-label {
+  grid-column: 1 / -1;
+  margin-bottom: 6px;
+  color: var(--ink-3);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+}
+.resume-step b {
+  color: var(--brass-hi);
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.resume-step b small {
+  color: var(--ink-3);
+  font-size: 16px;
+  font-weight: 400;
+}
+.resume-step-title {
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+}
+.resume-meter {
+  display: flex;
+  gap: 4px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.resume-meter li {
+  flex: 1;
+  height: 2px;
+  background: var(--line);
+}
+.resume-meter li.done {
+  background: var(--brass);
+  opacity: 0.6;
+}
+.resume-meter li.doing {
+  background: var(--brass-hi);
+  box-shadow: 0 0 0 0.5px var(--brass-hi);
+}
+.resume-facts {
+  margin: 22px 0 0;
+}
+.resume-facts > div {
+  display: grid;
+  grid-template-columns: 4.6em 1fr;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.resume-facts dt {
+  color: var(--ink-3);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+}
+.resume-facts dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.resume-ask {
+  margin: 26px 0 14px;
+  color: var(--ink-2);
+  font-family: var(--serif);
+  font-size: 15px;
+  letter-spacing: 0.06em;
+}
+.resume-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.resume-actions button {
+  min-width: 132px;
+  padding: 12px 24px;
+  font-size: 15px;
+  letter-spacing: 0.12em;
+}
+.resume-primary {
+  border-color: var(--brass);
+  background: var(--brass);
+  color: #17120a;
+  font-weight: 600;
+}
+.resume-primary:hover:not(:disabled) {
+  border-color: var(--brass-hi);
+  background: var(--brass-hi);
+}
+.resume-secondary {
+  color: var(--ink-2);
+}
+.resume-secondary:hover:not(:disabled) {
+  color: var(--ink);
+}
+.resume-actions button:focus {
+  outline: 2px solid var(--brass-hi);
+  outline-offset: 3px;
+}
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes scrim-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes resume-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@keyframes resume-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+/* タイトルカードの下の行: 再開で始めたとき */
+.song-intro-resume {
+  margin: 16px 0 0;
+  color: var(--brass-hi);
+  font-family: var(--serif);
+  font-size: 15px;
+  letter-spacing: 0.24em;
+  text-indent: 0.24em;
+  animation: rise-in 0.8s 0.95s var(--ease) both;
+}
+
 /* ---------- 画面下部のスタック（開始ボタン + ダイアログ / 状態表示） ---------- */
 .bottom-stack {
   position: absolute;
@@ -743,4 +960,56 @@ body .view-mode-toggle button.active {
   background: var(--brass-dim);
   box-shadow: inset 0 -1px var(--brass);
   color: var(--brass-hi);
+}
+
+/* 生成待ち。レイアウトを動かさず、opacity / transform だけで動かす。 */
+.generation-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  align-self: center;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(11, 10, 9, 0.94);
+  color: var(--ink-2);
+  font-size: 13px;
+  pointer-events: none;
+}
+.generation-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 12px;
+}
+.generation-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brass);
+  animation: generation-pulse 1.2s ease-in-out infinite;
+}
+.generation-dots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.generation-dots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+@keyframes generation-pulse {
+  0%,
+  70%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .generation-dots i {
+    animation: none;
+    opacity: 0.8;
+  }
 }

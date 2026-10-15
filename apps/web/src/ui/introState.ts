@@ -18,6 +18,8 @@ export type IntroInfo = {
   meter: string;
   key: string;
   measures: string;
+  /** 「前回の続きから」で始めたとき true（タイトルカードの下の行に出す） */
+  resumed?: boolean;
 };
 
 type IntroState = { phase: IntroPhase; info: IntroInfo | null };
@@ -65,6 +67,11 @@ export function introInfoOf(score: ScoreModel): IntroInfo {
 }
 
 let timers: number[] = [];
+// lesson.start { resume: true } を送ったあと、次のタイトルカードに「前回の続きから」を添える
+let resumeNext = false;
+export function setResumeNext(resume: boolean) {
+  resumeNext = resume;
+}
 let lastShown: { songId: string; at: number } | null = null;
 
 function clearTimers() {
@@ -73,6 +80,8 @@ function clearTimers() {
 }
 
 export function startSongIntro(score: ScoreModel) {
+  const resumed = resumeNext;
+  resumeNext = false;
   // 同じ曲の score が続けて届いたときは、演出をやり直さない
   const now = Date.now();
   if (
@@ -83,7 +92,10 @@ export function startSongIntro(score: ScoreModel) {
     return;
   lastShown = { songId: score.songId, at: now };
   clearTimers();
-  useSongIntro.setState({ phase: "dark", info: introInfoOf(score) });
+  useSongIntro.setState({
+    phase: "dark",
+    info: { ...introInfoOf(score), resumed },
+  });
   timers.push(
     window.setTimeout(() => useSongIntro.setState({ phase: "rise" }), DARK_MS),
     window.setTimeout(

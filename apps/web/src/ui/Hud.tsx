@@ -4,10 +4,12 @@ import { useAppStore } from "../state/store";
 import { send } from "../state/ws";
 import type { CameraPreset } from "../types";
 import { CountIn } from "./CountIn";
-import { Dialogue, StatusChip } from "./Dialogue";
+import { toggleFullscreen } from "./fullscreen";
+import { Dialogue, GenerationIndicator, StatusChip } from "./Dialogue";
 import {
   IconCloseup,
   IconDemo,
+  IconFullscreen,
   IconKeys,
   IconOverview,
   IconPlay,
@@ -19,6 +21,7 @@ import { ResultCard } from "./ResultCard";
 import { Roadmap } from "./Roadmap";
 import { SongIntro } from "./SongIntro";
 import { useSongIntro } from "./introState";
+import { GuideToggles } from "./GuideToggles";
 import { ViewModeToggle } from "./ViewModeToggle";
 
 const CAMERAS: { id: CameraPreset; label: string; icon: ReactElement }[] = [
@@ -37,7 +40,11 @@ export function Hud({
   const s = useAppStore();
   const file = useRef<HTMLInputElement>(null);
   const canPlayDemo =
-    s.lessonState === "demo" && s.timeline?.spec.mode === "watch";
+    Boolean(s.timeline?.notes.length) &&
+    !s.running &&
+    !s.generation &&
+    s.voiceLevel === 0 &&
+    ["briefing", "demo"].includes(s.lessonState);
   const upload = async (f?: File) => {
     if (!f) return;
     const body = new FormData();
@@ -151,27 +158,33 @@ export function Hud({
           }}
         />
       )}
-      {!intro && (
+      {(!intro || s.generation) && (
         <div className="bottom-stack">
-          {s.waitingForStart && s.handsMode !== "demo" && (
-            <button className="start" onClick={startPractice}>
-              <IconKeys />
-              鍵盤を押してスタート
-            </button>
-          )}
-          {teacherSpeaking ? (
-            <Dialogue text={s.subtitle} />
-          ) : (
-            status && <StatusChip text={status} />
-          )}
+          {s.generation && <GenerationIndicator phase={s.generation} />}
+          {!intro &&
+            !s.generation &&
+            s.waitingForStart &&
+            s.handsMode !== "demo" && (
+              <button className="start" onClick={startPractice}>
+                <IconKeys />
+                鍵盤を押してスタート
+              </button>
+            )}
+          {!intro &&
+            (teacherSpeaking ? (
+              <Dialogue text={s.subtitle} />
+            ) : (
+              !s.generation && status && <StatusChip text={status} />
+            ))}
         </div>
       )}
       <div className="controls">
+        <GuideToggles />
         <ViewModeToggle />
         <button
           className="demo"
           disabled={!canPlayDemo}
-          onClick={playDemo}
+          onClick={() => playDemo(true)}
           aria-label="お手本を再生"
         >
           <IconDemo />
@@ -185,12 +198,22 @@ export function Hud({
               aria-label={camera.label}
               aria-pressed={s.camera === camera.id}
               title={camera.label}
-              onClick={() => s.set({ camera: camera.id })}
+              // お手本中に押したときは、自動カメラを止めて、選んだ視点に固定する（次のお手本で自動に戻る）
+              onClick={() => s.set({ camera: camera.id, cameraAuto: false })}
             >
               {camera.icon}
               <span className="tip">{camera.label}</span>
             </button>
           ))}
+          <button
+            className="icon"
+            aria-label="全画面"
+            title="全画面（Cmd+Shift+F）"
+            onClick={() => void toggleFullscreen()}
+          >
+            <IconFullscreen />
+            <span className="tip">全画面</span>
+          </button>
         </div>
       </div>
       {s.hit?.kind === "miss" && <div key={s.hit.at} className="miss-flash" />}

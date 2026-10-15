@@ -14,6 +14,7 @@ from piano_coach.brain.base import ActionReady, BrainError, SayDelta, TutorBrain
 from piano_coach.exercise.builder import DrillSpec, ExerciseBuilder, ExerciseSpec
 from piano_coach.exercise.registry import ExerciseTimelineCache
 from piano_coach.lesson.actions import AgentAction, validate_action
+from piano_coach.lesson.store import LessonStore, SavedLesson
 from piano_coach.lesson.verdict import RealtimeSummary, suggested_verdict
 from piano_coach.paths import DATA_DIR
 from piano_coach.score.fingering import FingeringEstimator
@@ -30,7 +31,7 @@ FINGERING_CHUNK_TIMEOUT_S = float(os.environ.get("PIANO_COACH_FINGERING_TIMEOUT"
 
 class LessonOrchestrator:
     def __init__(self, send: Send, brain: TutorBrain | None = None, voice: Any | None = None,
-                 exercise_cache: ExerciseTimelineCache | None = None) -> None:
+                 exercise_cache: ExerciseTimelineCache | None = None, lesson_store: LessonStore | None = None) -> None:
         self.send, self.brain, self.voice = send, brain, voice
         self._brain_factory = type(brain) if brain is not None else None
         self.state, self.score, self.plan, self.timeline = "idle", None, None, None
@@ -38,6 +39,10 @@ class LessonOrchestrator:
         self._brain_lock, self._send_lock = asyncio.Lock(), asyncio.Lock()
         self._builder, self._queued_user_messages = ExerciseBuilder(), []
         self._exercise_cache = exercise_cache
+        self._lesson_store = lesson_store or LessonStore()
+        self._hearing_answers: list[dict[str, Any]] = []
+        self._hearing_questions: dict[str, str] = {}
+        self._recent_attempts: list[dict] = []
         self._attempt_counts: dict[tuple, int] = defaultdict(int)
         self._poor_retry_streak = 0
         self._poor_retry_key: tuple | None = None
@@ -46,6 +51,8 @@ class LessonOrchestrator:
         self._voice_workers: set[asyncio.Task] = set()
         self._active_utterances: set[str] = set()
         self._closed = False
+        self._action_utterance: str | None = None
+        self._completed_voice: set[str] = set()
 
     def _own_task(self, coroutine: Any) -> asyncio.Task:
         task = asyncio.create_task(coroutine)
@@ -110,12 +117,21 @@ class LessonOrchestrator:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
-    async def start(self, score: ScoreModel, page_urls: list[str], page_paths: list[Path]) -> None:
+    async def start(self, score: ScoreModel, page_urls: list[str], page_paths: list[Path], *, resume: bool = False) -> None:
         self.score = score
         await self.transition("analyzing")
         await self.emit("song.ready", {"score": score.model_dump(mode="json"), "pageImageUrls": page_urls})
         analysis = await self._analysis(page_paths)
         await self.emit("song.analysis", analysis)
+        if resume:
+            saved = self._lesson_store.load(score.songId)
+            if saved is not None and not saved.finished:
+                try:
+                    await self._resume(saved)
+                    self._own_task(self.estimate_fingering())
+                    return
+                except (TypeError, ValueError, KeyError) as error:
+                    log.warning("could not restore saved lesson for %s: %s", score.songId, error)
         await self.transition("hearing")
         action = await self._brain_turn("SONG_LOADED", self._song_payload(analysis))
         # 運指の設計（別の Claude プロセス）は、先生の最初の発話が終わってから始める。
@@ -124,6 +140,50 @@ class LessonOrchestrator:
         self._own_task(self.estimate_fingering())
         if action: await self.apply_action(action)
         else: await self.ask_fallback(0)
+
+    async def _resume(self, saved: SavedLesson) -> None:
+        """Restore a persisted plan without repeating its hearing phase."""
+        raw_steps = saved.plan.get("steps")
+        if not isinstance(raw_steps, list) or not raw_steps:
+            raise ValueError("saved plan has no steps")
+        steps = []
+        for index, raw_step in enumerate(raw_steps):
+            if not isinstance(raw_step, dict):
+                raise ValueError("saved plan step is invalid")
+            exercise = ExerciseSpec.model_validate(raw_step["exercise"])
+            steps.append({
+                "id": str(raw_step.get("id", f"step-{index + 1}")),
+                "title": str(raw_step["title"]), "description": str(raw_step["description"]),
+                "status": str(raw_step.get("status", "doing" if index == saved.stepIndex else "todo")),
+                "exercise": exercise,
+            })
+        step_index = min(saved.stepIndex, len(steps) - 1)
+        current_exercise = ExerciseSpec.model_validate(saved.currentExercise) if saved.currentExercise else steps[step_index]["exercise"]
+        self.plan = {"goal": str(saved.plan["goal"]), "currentStepId": steps[step_index]["id"], "steps": steps}
+        self._step_index = step_index
+        self.timeline = None
+        self._hearing_answers = list(saved.hearingAnswers)
+        self._recent_attempts = [attempt.model_dump(mode="json") for attempt in saved.recentAttempts][-5:]
+        await self.emit("plan.updated", {"plan": self.public_plan()})
+        # Rejoining is intentionally a direct analyzing -> briefing transition;
+        # hearing and plan creation were already completed in the saved lesson.
+        await self.transition("briefing")
+        payload = {
+            "goal": self.plan["goal"],
+            "steps": [{"title": step["title"], "status": step["status"]} for step in steps],
+            "currentStepIndex": self._step_index,
+            "currentExercise": current_exercise.model_dump(mode="json"),
+            "hearingAnswers": self._hearing_answers,
+            "recentAttempts": self._recent_attempts,
+        }
+        action = await self._brain_turn("RESUME", payload)
+        if action:
+            await self.apply_action(action)
+            return
+        await self._speak_fixed("おかえりなさい。前回の続きからいこう。")
+        # A watch timeline cannot be started by the learner; a failed tutor
+        # response always resumes into the corresponding wait exercise.
+        await self.prepare_exercise(current_exercise.model_copy(update={"mode": "wait"}) if current_exercise.mode == "watch" else current_exercise)
 
     def _song_payload(self, analysis: dict) -> dict:
         assert self.score
@@ -153,6 +213,7 @@ class LessonOrchestrator:
         return result
 
     async def _brain_turn(self, kind: str, payload: dict) -> AgentAction | None:
+        self._action_utterance = None
         if not await self._ensure_brain(): return None
         utterance_id, queue, saw_say = str(uuid.uuid4()), asyncio.Queue(), False
         self._active_utterances.add(utterance_id)
@@ -164,7 +225,11 @@ class LessonOrchestrator:
         async def voice_worker() -> None:
             if not self.voice: return
             try:
+                reported_error = False
                 async for clip in self.voice.speak(utterance_id, stream()):
+                    if clip.url is None and not reported_error and getattr(self.voice, "last_error", None):
+                        await self.emit("error", {"message": self.voice.last_error})
+                        reported_error = True
                     await self.emit("voice.clip", {"utteranceId": clip.utterance_id, "seq": clip.seq, "url": clip.url, "text": clip.text, "last": clip.last})
             except Exception as error: log.warning("voice stream failed: %s", error)
         worker, raw, failed = asyncio.create_task(voice_worker()), None, False
@@ -198,7 +263,10 @@ class LessonOrchestrator:
             self._active_utterances.discard(utterance_id)
         if saw_say: await self.emit("agent.say", {"utteranceId": utterance_id, "delta": "", "final": True})
         if failed or raw is None: return None
-        try: return validate_action(raw, self.state, current_spec=self.timeline.spec if self.timeline else None, measure_count=len(self.score.measures) if self.score else None)
+        try:
+            action = validate_action(raw, self.state, current_spec=self.timeline.spec if self.timeline else None, measure_count=len(self.score.measures) if self.score else None)
+            self._action_utterance = utterance_id if saw_say else None
+            return action
         except Exception as error: log.warning("invalid %s action: %s", kind, error); return None
 
     async def _speak_fixed(self, text: str, gate: bool = False) -> str:
@@ -223,10 +291,12 @@ class LessonOrchestrator:
             {"id": "experience", "text": "ピアノの経験はどれくらいですか？", "options": ["はじめて", "少し弾ける", "経験あり"], "allowFree": True},
             {"id": "range", "text": "どこから練習したいですか？", "options": ["最初のフレーズ", "右手から", "全部"], "allowFree": True},
         ][index]
+        self._hearing_questions[question["id"]] = question["text"]
         await self.emit("agent.ask", {"questionId": question["id"], "text": question["text"], "options": question["options"], "allowFree": question["allowFree"]})
 
     async def hearing_answer(self, question_id: str, answer: str) -> None:
         if self.state != "hearing": return
+        self._hearing_answers.append({"questionId": question_id, "question": self._hearing_questions.get(question_id, ""), "answer": answer})
         action = await self._brain_turn("HEARING_ANSWER", {"questionId": question_id, "answer": answer})
         if action: await self.apply_action(action)
         elif question_id == "experience": await self.ask_fallback(1)
@@ -238,6 +308,8 @@ class LessonOrchestrator:
         self.plan = {"goal": "最初のフレーズをひけるようになる", "currentStepId": "step-1", "steps": [
             {"id": "step-1", "title": "右手を確認", "description": "右手をゆっくり確認", "status": "doing", "exercise": spec},
             {"id": "step-2", "title": "右手でひく", "description": "リズムに合わせる", "status": "todo", "exercise": spec.model_copy(update={"mode": "play"})}]}
+        self._step_index = 0
+        self._save_progress()
         await self.transition("planning"); await self.emit("plan.updated", {"plan": self.public_plan()}); await self.begin_demo(spec.model_copy(update={"mode": "watch"}))
 
     def public_plan(self) -> dict:
@@ -246,16 +318,17 @@ class LessonOrchestrator:
 
     async def _apply_plan(self, action: AgentAction) -> None:
         await self.transition("planning")
-        self.plan = {"goal": action.plan.goal, "currentStepId": "step-1", "steps": []}
+        self.plan = {"goal": action.plan.goal, "currentStepId": "step-1", "steps": []}; self._step_index = 0
         for index, step in enumerate(action.plan.steps):
             self.plan["steps"].append({"id": f"step-{index+1}", "title": step.title, "description": step.description, "status": "doing" if index == 0 else "todo", "exercise": step.exercise})
+        self._save_progress()
         await self.emit("plan.updated", {"plan": self.public_plan()})
         first = self.plan["steps"][0]["exercise"]
         follow = await self._brain_turn("PLAN_ACCEPTED", {"goal": self.plan["goal"], "exercise": first.model_dump()})
         if follow: await self.apply_action(follow)
         else: await self.begin_demo(first.model_copy(update={"mode": "watch"}))
 
-    async def prepare_exercise(self, spec: ExerciseSpec) -> bool:
+    async def prepare_exercise(self, spec: ExerciseSpec, narration_id: str | None = None) -> bool:
         assert self.score
         # Build first: a bad agent request must not invalidate the current version/timeline.
         next_version = self.exercise_version + 1
@@ -268,12 +341,18 @@ class LessonOrchestrator:
         self.exercise_version, self.timeline = next_version, timeline
         if self._exercise_cache:
             self._exercise_cache.put(timeline, self.score)
-        await self.transition("briefing"); await self.emit("exercise.ready", {"timeline": self.timeline.model_dump(mode="json")})
-        await self._speak_fixed(self.exercise_instruction(spec), gate=True)
+        self._save_progress()
+        if self.state != "briefing":
+            await self.transition("briefing")
+        await self.emit("exercise.ready", {"timeline": self.timeline.model_dump(mode="json")})
+        if narration_id:
+            self.awaiting_voice = None if narration_id in self._completed_voice else narration_id
+        else:
+            await self._speak_fixed(self.exercise_instruction(spec), gate=True)
         return True
 
-    async def begin_demo(self, spec: ExerciseSpec) -> None:
-        if not await self.prepare_exercise(spec.model_copy(update={"mode": "watch"})):
+    async def begin_demo(self, spec: ExerciseSpec, narration_id: str | None = None) -> None:
+        if not await self.prepare_exercise(spec.model_copy(update={"mode": "watch"}), narration_id=narration_id):
             return
         await self.transition("demo"); await self.emit("demo.play", {"exerciseId": self.timeline.exerciseId, "exerciseVersion": self.exercise_version})
 
@@ -291,6 +370,8 @@ class LessonOrchestrator:
         return f"次は{hand}で、{spec.measures[0]}から{spec.measures[1]}しょうせつめを、{pace}ひいてみよう。"
 
     async def voice_done(self, utterance_id: str) -> None:
+        if len(self._completed_voice) >= 128: self._completed_voice.clear()
+        self._completed_voice.add(utterance_id)
         if utterance_id == self.awaiting_voice: self.awaiting_voice = None
 
     async def practice_started(self, exercise_id: str, version: int) -> None:
@@ -309,11 +390,14 @@ class LessonOrchestrator:
         await self.transition("reviewing"); summary = RealtimeSummary.model_validate(payload["summary"])
         key = (self.timeline.spec.measures, self.timeline.spec.hand, self.timeline.spec.mode); self._attempt_counts[key] += 1
         verdict, fallback = suggested_verdict(summary, self.timeline.spec)
+        self._recent_attempts.append({"exercise": self.timeline.spec.model_dump(mode="json"), "summary": summary.model_dump(mode="json"), "verdict": verdict})
+        self._recent_attempts = self._recent_attempts[-5:]
         action = await self._brain_turn("ATTEMPT_RESULT", {"exercise": self.timeline.spec.model_dump(), "summary": summary.model_dump(), "suggestedVerdict": verdict, "attemptCountOnThisExercise": self._attempt_counts[key]})
         if action: await self.apply_action(action)
         else:
             await self._speak_fixed("よくがんばったね。もう一回確認してみよう。")
             await self.prepare_exercise(self._fallback_exercise(summary, verdict, fallback))
+        self._save_progress()
         queued, self._queued_user_messages = self._queued_user_messages, []
         for text in queued: await self.user_message(text)
 
@@ -363,23 +447,54 @@ class LessonOrchestrator:
         if action: await self.apply_action(action)
 
     async def apply_action(self, action: AgentAction) -> None:
+        narration_id, self._action_utterance = self._action_utterance, None
         if action.ui: await self.emit("ui.hint", action.ui)
-        if action.type == "ask": await self.emit("agent.ask", {"questionId": action.question.id, "text": action.question.text, "options": action.question.options, "allowFree": action.question.allowFree})
+        if action.type == "ask":
+            if self.state == "hearing":
+                self._hearing_questions[action.question.id] = action.question.text
+            await self.emit("agent.ask", {"questionId": action.question.id, "text": action.question.text, "options": action.question.options, "allowFree": action.question.allowFree})
         elif action.type == "set_plan": await self._apply_plan(action)
-        elif action.type == "demo": await self.begin_demo(action.exercise)
-        elif action.type in {"start_exercise", "retry"}: await self.prepare_exercise(action.exercise)
+        elif action.type == "demo": await self.begin_demo(action.exercise, narration_id=narration_id)
+        elif action.type in {"start_exercise", "retry"}: await self.prepare_exercise(action.exercise, narration_id=narration_id)
         elif action.type == "next": await self.next_step()
-        elif action.type == "finish": await self.transition("finished")
+        elif action.type == "finish":
+            await self.transition("finished")
+            self._save_progress()
 
     async def next_step(self) -> None:
         if not self.plan: return
         self.plan["steps"][self._step_index]["status"] = "done"; self._step_index += 1
-        if self._step_index >= len(self.plan["steps"]): await self.transition("finished"); return
+        if self._step_index >= len(self.plan["steps"]):
+            await self.transition("finished"); self._save_progress(); return
         step = self.plan["steps"][self._step_index]; step["status"] = "doing"; self.plan["currentStepId"] = step["id"]
+        self._save_progress()
         await self.emit("plan.updated", {"plan": self.public_plan()})
         action = await self._brain_turn("STEP_STARTED", {"exercise": step["exercise"].model_dump()})
         if action: await self.apply_action(action)
         else: await self.prepare_exercise(step["exercise"])
+
+    def _save_progress(self) -> None:
+        """Persistence is best-effort: local-disk errors never stop a lesson."""
+        if not self.score or not self.plan:
+            return
+        current = self.timeline.spec if self.timeline else self.plan["steps"][min(self._step_index, len(self.plan["steps"]) - 1)]["exercise"]
+        plan = {
+            "goal": self.plan["goal"], "currentStepId": self.plan["currentStepId"],
+            "steps": [{
+                "id": step["id"], "title": step["title"], "description": step["description"],
+                "status": step["status"], "exercise": step["exercise"].model_dump(mode="json"),
+            } for step in self.plan["steps"]],
+        }
+        try:
+            self._lesson_store.save(SavedLesson.now(
+                songId=self.score.songId, plan=plan, stepIndex=self._step_index,
+                currentExercise=current.model_dump(mode="json"), hearingAnswers=self._hearing_answers,
+                recentAttempts=self._recent_attempts[-5:], finished=self.state == "finished",
+            ))
+        except Exception as error:
+            # LessonStore already handles ordinary I/O errors.  Keep this
+            # outer guard for custom stores and serialization edge cases.
+            log.warning("could not persist lesson progress: %s", error)
 
     async def estimate_fingering(self, force: bool = False) -> None:
         """force=True のときはキャッシュを使わずに設計し直す（成功したときだけ上書きする）。"""

@@ -13,8 +13,9 @@ export default defineConfig({
   },
   webServer: [
     {
+      // 保存した進捗が次の実行の再開カードを出さないよう、毎回きれいな状態から始める
       command:
-        "PIANO_COACH_FAKE_BRAIN=1 PIANO_COACH_FAKE_TTS=1 PIANO_COACH_DATA_DIR=../../data-e2e uv run piano-coach-server",
+        "rm -rf ../../data-e2e; PIANO_COACH_FAKE_BRAIN=1 PIANO_COACH_FAKE_TTS=1 PIANO_COACH_DATA_DIR=../../data-e2e uv run piano-coach-server",
       cwd: "../server",
       url: "http://127.0.0.1:8787/api/health",
       reuseExistingServer: false,

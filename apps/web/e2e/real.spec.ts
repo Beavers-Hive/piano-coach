@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { dismissEntryResume, startFromBeginning } from "./helpers";
 
 // 本物の Claude と Irodori を使った通しテスト。サブスクの利用枠を使うので、普段は実行しない。
 //   PIANO_COACH_REAL=1 npx playwright test -c playwright.real.config.ts
@@ -29,7 +30,9 @@ test("real Claude + Irodori: hearing → plan → demo → practice → feedback
   await page.getByRole("button", { name: "音声を有効にして準備する" }).click();
   await page.getByRole("button", { name: "レッスンへ進む" }).click();
   const songSelect = page.locator('select[aria-label="曲を選択"]');
+  await dismissEntryResume(page);
   await songSelect.selectOption({ index: 1 });
+  await startFromBeginning(page, 60_000);
   mark("曲を選択");
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${SHOTS}/0-import.png` });

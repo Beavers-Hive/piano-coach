@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { dismissEntryResume, startFromBeginning } from "./helpers";
 
 test("fake-brain lesson completes a guided wait-mode attempt", async ({
   page,
@@ -23,9 +24,11 @@ test("fake-brain lesson completes a guided wait-mode attempt", async ({
   await expect(songSelect.locator("option")).toHaveCount(3, {
     timeout: 30_000,
   });
+  await dismissEntryResume(page);
   await songSelect.selectOption({
     label: "メヌエット ト長調 — ペツォールト（伝 J.S.バッハ）",
   });
+  await startFromBeginning(page, 15_000);
   await expect(page.locator(".question")).toBeVisible({ timeout: 15_000 });
   await page.locator(".question button").first().click();
   await expect(page.locator(".question")).toContainText("どこから", {

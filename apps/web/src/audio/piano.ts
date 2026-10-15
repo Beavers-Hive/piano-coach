@@ -47,12 +47,37 @@ export function setPianoDuck(ducked: boolean): void {
   piano().volume.rampTo(ducked ? -17 : -5, 0.12);
 }
 
-export function metronome(time?: number): void {
+/** 1 拍ごとのクリック。小節の頭（accent）は、少し高く強い音にする。 */
+export function metronome(time?: number, accent = false): void {
   click ??= new Tone.MembraneSynth({
     pitchDecay: 0.01,
     octaves: 2,
     envelope: { attack: 0.001, decay: 0.06, sustain: 0 },
   }).toDestination();
-  click.volume.value = -10;
-  click.triggerAttackRelease("C6", "32n", time);
+  click.volume.value = accent ? -6 : -11;
+  click.triggerAttackRelease(accent ? "G6" : "C6", "32n", time);
+}
+
+/**
+ * 演奏モードの「合わせる目安」のお手本の音。自分の演奏の邪魔にならないよう、少し控えめに鳴らす。
+ * time は Tone の時刻（Transport のコールバックで渡される値）。
+ */
+export function playGuideNote(
+  pitch: number,
+  durationSeconds: number,
+  time: number,
+): void {
+  piano().triggerAttackRelease(
+    Tone.Frequency(pitch, "midi").toNote(),
+    Math.max(0.08, durationSeconds),
+    time,
+    0.55,
+  );
+}
+
+/** 音が実際に出るまでの遅れ（ミリ秒）。画面の拍と、聞こえる拍を揃えるために使う。 */
+export function outputLatencyMs(): number {
+  const context = Tone.getContext().rawContext as AudioContext;
+  const seconds = context.outputLatency ?? context.baseLatency ?? 0;
+  return Math.min(150, Math.max(0, seconds * 1000));
 }

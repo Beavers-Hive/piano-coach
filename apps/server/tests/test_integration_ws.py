@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from piano_coach.api.app import create_app
+from piano_coach.exercise import ExerciseSpec
+from piano_coach.lesson.store import LessonStore, SavedLesson
 
 
 def receive_until(ws, wanted: str):
@@ -12,6 +14,8 @@ def receive_until(ws, wanted: str):
     while True:
         message = ws.receive_json()
         seen.append(message)
+        if message["type"] == "voice.clip" and message["payload"].get("last"):
+            ws.send_json({"type": "voice.done", "payload": {"utteranceId": message["payload"]["utteranceId"]}})
         if message["type"] == wanted:
             return message, seen
 
@@ -45,10 +49,6 @@ def test_scripted_brain_end_to_end(monkeypatch):
         assert practice_ready["payload"]["timeline"]["spec"]["mode"] == "wait"
         version = practice_ready["payload"]["timeline"]["exerciseVersion"]
         exercise_id = practice_ready["payload"]["timeline"]["exerciseId"]
-        instruction, _ = receive_until(ws, "voice.clip")
-        while not instruction["payload"]["text"].startswith("次は"):
-            instruction, _ = receive_until(ws, "voice.clip")
-        ws.send_json({"type": "voice.done", "payload": {"utteranceId": instruction["payload"]["utteranceId"]}})
         ws.send_json({"type": "practice.started", "payload": {"exerciseId": exercise_id, "exerciseVersion": version}})
         _, _ = receive_until(ws, "lesson.state")  # practicing
         ws.send_json({"type": "attempt.submit", "payload": {"exerciseId": exercise_id, "exerciseVersion": version, "mode": "wait", "events": [], "summary": {"total": 10, "perfect": 10, "good": 0, "miss": 0, "extra": 0, "timingMeanMs": None, "timingStdMs": None, "perMeasure": [], "aborted": False}}})
@@ -62,6 +62,82 @@ def test_fake_server_starts(monkeypatch):
     monkeypatch.setenv("PIANO_COACH_FAKE_TTS", "1")
     with TestClient(create_app()) as client:
         assert client.get("/api/health").json()["tts"] is True
+
+
+def test_songs_exposes_unfinished_progress_only(monkeypatch, tmp_path):
+    monkeypatch.setenv("PIANO_COACH_FAKE_TTS", "1")
+    store = LessonStore(tmp_path)
+    with TestClient(create_app(lesson_store=store)) as client:
+        song_id = client.get("/api/songs").json()["songs"][0]["songId"]
+        exercise = ExerciseSpec(measures=(1, 1), hand="right", tempoPercent=60, mode="wait", loop=1, metronome=True).model_dump(mode="json")
+        saved = SavedLesson.now(songId=song_id, plan={"goal": "目標", "steps": [
+            {"id": "step-1", "title": "右手", "description": "", "status": "doing", "exercise": exercise},
+        ]}, stepIndex=0, currentExercise=exercise)
+        store.save(saved)
+        song = next(item for item in client.get("/api/songs").json()["songs"] if item["songId"] == song_id)
+        assert song["progress"]["stepTitle"] == "右手"
+        store.save(saved.model_copy(update={"finished": True}))
+        song = next(item for item in client.get("/api/songs").json()["songs"] if item["songId"] == song_id)
+        assert song["progress"] is None
+
+
+def test_resume_restores_plan_without_asking_again(monkeypatch, tmp_path):
+    monkeypatch.setenv("PIANO_COACH_FAKE_BRAIN", "1")
+    monkeypatch.setenv("PIANO_COACH_FAKE_TTS", "1")
+    store = LessonStore(tmp_path)
+    with TestClient(create_app(lesson_store=store)) as client:
+        song_id = client.get("/api/songs").json()["songs"][1]["songId"]
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "lesson.start", "payload": {"songId": song_id}})
+            receive_until(ws, "agent.ask")
+            ws.send_json({"type": "hearing.answer", "payload": {"questionId": "experience", "answer": "はじめて"}})
+            receive_until(ws, "agent.ask")
+            ws.send_json({"type": "hearing.answer", "payload": {"questionId": "range", "answer": "最初から"}})
+            demo, _ = receive_until(ws, "demo.play")
+            ws.send_json({"type": "demo.finished", "payload": demo["payload"]})
+            ready, _ = receive_until(ws, "exercise.ready")
+            ws.send_json({"type": "attempt.submit", "payload": {"exerciseId": ready["payload"]["timeline"]["exerciseId"],
+                "exerciseVersion": ready["payload"]["timeline"]["exerciseVersion"], "summary": {"total": 10, "perfect": 10,
+                "good": 0, "miss": 0, "extra": 0, "timingMeanMs": None, "timingStdMs": None, "perMeasure": [], "aborted": False}}})
+            progressed, _ = receive_until(ws, "plan.updated")
+            assert [step["status"] for step in progressed["payload"]["plan"]["steps"]] == ["done", "doing"]
+
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "lesson.start", "payload": {"songId": song_id, "resume": True}})
+            restored, before_ready = receive_until(ws, "plan.updated")
+            assert not any(message["type"] == "agent.ask" for message in before_ready)
+            assert [step["status"] for step in restored["payload"]["plan"]["steps"]] == ["done", "doing"]
+            ready, after_plan = receive_until(ws, "exercise.ready")
+            assert ready["payload"]["timeline"]["spec"]["mode"] == "wait"
+            assert not any(message["type"] == "agent.ask" for message in after_plan)
+
+
+def test_resume_without_progress_uses_normal_hearing(monkeypatch, tmp_path):
+    monkeypatch.setenv("PIANO_COACH_FAKE_BRAIN", "1")
+    monkeypatch.setenv("PIANO_COACH_FAKE_TTS", "1")
+    with TestClient(create_app(lesson_store=LessonStore(tmp_path))) as client, client.websocket_connect("/ws") as ws:
+        song_id = client.get("/api/songs").json()["songs"][1]["songId"]
+        ws.send_json({"type": "lesson.start", "payload": {"songId": song_id, "resume": True}})
+        ask, _ = receive_until(ws, "agent.ask")
+        assert ask["payload"]["questionId"] == "experience"
+
+
+def test_resume_brain_failure_uses_saved_exercise(monkeypatch, tmp_path):
+    monkeypatch.setenv("PIANO_COACH_FAKE_BRAIN", "1")
+    monkeypatch.setenv("PIANO_COACH_FAKE_BRAIN_MODE", "broken_json")
+    monkeypatch.setenv("PIANO_COACH_FAKE_TTS", "1")
+    store = LessonStore(tmp_path)
+    exercise = ExerciseSpec(measures=(1, 2), hand="right", tempoPercent=60, mode="wait", loop=1, metronome=True).model_dump(mode="json")
+    with TestClient(create_app(lesson_store=store)) as client, client.websocket_connect("/ws") as ws:
+        song_id = client.get("/api/songs").json()["songs"][1]["songId"]
+        store.save(SavedLesson.now(songId=song_id, plan={"goal": "目標", "currentStepId": "step-1", "steps": [
+            {"id": "step-1", "title": "右手", "description": "", "status": "doing", "exercise": exercise},
+        ]}, stepIndex=0, currentExercise=exercise))
+        ws.send_json({"type": "lesson.start", "payload": {"songId": song_id, "resume": True}})
+        receive_until(ws, "plan.updated")
+        ready, messages = receive_until(ws, "exercise.ready")
+        assert ready["payload"]["timeline"]["spec"]["measures"] == [1, 2]
+        assert not any(message["type"] == "agent.ask" for message in messages)
 
 
 def test_exercise_score_api_after_exercise_ready(monkeypatch):
@@ -98,10 +174,6 @@ def test_scripted_brain_switches_to_drill_after_two_poor_attempts(monkeypatch):
         ready, _ = receive_until(ws, "exercise.ready")
 
         def start_practice(timeline):
-            clip, _ = receive_until(ws, "voice.clip")
-            while not clip["payload"]["text"].startswith("次は"):
-                clip, _ = receive_until(ws, "voice.clip")
-            ws.send_json({"type": "voice.done", "payload": {"utteranceId": clip["payload"]["utteranceId"]}})
             ws.send_json({"type": "practice.started", "payload": {"exerciseId": timeline["exerciseId"], "exerciseVersion": timeline["exerciseVersion"]}})
             receive_until(ws, "lesson.state")
 

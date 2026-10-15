@@ -1,5 +1,10 @@
 import * as Tone from "tone";
-import { metronome, playPiano } from "../audio/piano";
+import {
+  metronome,
+  outputLatencyMs,
+  playGuideNote,
+  playPiano,
+} from "../audio/piano";
 import { useAppStore } from "../state/store";
 import { send } from "../state/ws";
 import type { ExerciseTimeline, TimelineNote } from "../types";
@@ -10,6 +15,7 @@ import {
   startClock,
   stopClock,
 } from "./clock";
+import { buildGuideSchedule, guideIsActive } from "./guide";
 import { RealtimeJudge } from "./Judge";
 
 let judge: RealtimeJudge | null = null;
@@ -19,6 +25,10 @@ let countInTimer = 0;
 let activeTimeline: ExerciseTimeline | null = null;
 let demoTriggered = new Set<string>();
 let slowedEventId: string | null = null;
+let previewRestore: Pick<
+  ReturnType<typeof useAppStore.getState>,
+  "lessonState" | "waitingForStart" | "handsMode" | "subtitle" | "camera"
+> | null = null;
 
 function currentTimeline(): ExerciseTimeline | null {
   return useAppStore.getState().timeline;
@@ -40,7 +50,12 @@ function loop(): void {
 
 export function startPractice(): void {
   const timeline = currentTimeline();
-  if (!timeline || useAppStore.getState().running) return;
+  if (
+    !timeline ||
+    useAppStore.getState().running ||
+    useAppStore.getState().generation
+  )
+    return;
   // お手本用（watch）の課題は演奏できない。次の課題が届くまで待つ
   if (timeline.spec.mode === "watch") return;
   countIn(timeline);
@@ -54,26 +69,47 @@ function countIn(timeline: ExerciseTimeline): void {
     waitingForStart: false,
     subtitle: "",
     countInBeat: null,
-    countInBpm: Math.round(timeline.bpm),
     handsMode: "hidden",
   });
   const transport = Tone.getTransport();
-  const beatSeconds = 60 / timeline.bpm;
   transport.stop();
   transport.cancel(0);
-  // カウントインは、これから演奏させるテンポ（tempoPercent を適用した bpm）で 1 小節ぶん数える。
-  // 画面の数字（3/4 拍子なら 3, 2, 1）も、クリックの音と同じ時刻に切り替える。
-  for (let beat = 0; beat < timeline.beatsPerMeasure; beat += 1) {
-    const remaining = timeline.beatsPerMeasure - beat;
-    transport.scheduleOnce((time) => {
-      metronome(time);
-      Tone.getDraw().schedule(
-        () => useAppStore.getState().set({ countInBeat: remaining }),
-        time,
-      );
-    }, beat * beatSeconds);
+  // カウントインは素早く。演奏とガイド音は課題のテンポを保つ。
+  // 演奏モードでは、そのまま演奏の間もメトロノームとお手本の音を鳴らし、合わせやすくする。
+  // クリックの音と、画面の数字（3, 2, 1）は、同じ時刻に切り替える。
+  const guideOptions = {
+    metronome: state.guideMetronome,
+    notes: state.guideNotes,
+  };
+  const guideActive = guideIsActive(timeline, guideOptions);
+  const schedule = buildGuideSchedule(timeline, {
+    // 待機モードは、カウントインのクリックだけ（演奏中の目安は鳴らさない）
+    metronome: guideActive && guideOptions.metronome,
+    notes: guideActive && guideOptions.notes,
+  });
+  state.set({ countInBpm: Math.round(schedule.countInBpm) });
+  for (const click of schedule.clicks) {
+    transport.schedule((time) => {
+      metronome(time, click.accent);
+      if (click.countInBeat !== null) {
+        Tone.getDraw().schedule(
+          () => useAppStore.getState().set({ countInBeat: click.countInBeat }),
+          time,
+        );
+      }
+    }, click.atMs / 1000);
   }
-  startClock(-timeline.countInMs);
+  for (const guideNote of schedule.notes) {
+    transport.schedule(
+      (time) =>
+        playGuideNote(guideNote.pitch, guideNote.durationMs / 1000, time),
+      guideNote.atMs / 1000,
+    );
+  }
+  // 画面の時計は、「音が実際に聞こえる時刻」に合わせる（Transport の開始 + 出力の遅れ）。
+  // 画面のノーツが判定ラインに届く瞬間と、聞こえるクリック・お手本の音が揃う。
+  const audibleDelayMs = 30 + outputLatencyMs();
+  startClock(-schedule.countInMs, performance.now() + audibleDelayMs);
   transport.start("+0.03");
 
   countInTimer = window.setTimeout(() => {
@@ -86,11 +122,14 @@ function countIn(timeline: ExerciseTimeline): void {
       return;
     }
     countInTimer = 0;
-    transport.stop();
-    transport.cancel(0);
-    startClock(0);
     judge = new RealtimeJudge(timeline);
     const wait = timeline.spec.mode === "wait";
+    // 目安の音が続く間は Transport を止めず、画面の時計も 0 に戻さずにそのまま進める
+    if (!guideActive) {
+      transport.stop();
+      transport.cancel(0);
+      startClock(0);
+    }
     if (wait) pauseClock();
     useAppStore.getState().set({
       running: true,
@@ -110,7 +149,7 @@ function countIn(timeline: ExerciseTimeline): void {
         lastEnd(timeline) + (60_000 / timeline.bpm) * timeline.beatsPerMeasure;
       finishTimer = window.setTimeout(() => stopPractice(false), finalMs);
     }
-  }, timeline.countInMs);
+  }, schedule.countInMs + audibleDelayMs);
 }
 
 export function handlePracticeNote(
@@ -157,6 +196,7 @@ export function stopPractice(aborted: boolean): void {
   cancelAnimationFrame(frame);
   clearTimeout(finishTimer);
   finishTimer = 0;
+  stopGuide();
   stopClock();
   const { events, summary } = judge.finish(aborted);
   state.set({
@@ -179,10 +219,29 @@ export function stopPractice(aborted: boolean): void {
   activeTimeline = null;
 }
 
-export function playDemo(): void {
+export function playDemo(preview = false): void {
   const timeline = currentTimeline();
   const state = useAppStore.getState();
-  if (state.lessonState !== "demo" || timeline?.spec.mode !== "watch") return;
+  if (!timeline?.notes.length) return;
+  if (preview) {
+    if (
+      state.generation ||
+      state.voiceLevel > 0 ||
+      (state.running && !previewRestore)
+    )
+      return;
+    if (!previewRestore)
+      previewRestore = {
+        lessonState: state.lessonState,
+        waitingForStart: state.waitingForStart,
+        handsMode: state.handsMode,
+        subtitle: state.subtitle,
+        camera: state.camera,
+      };
+  } else {
+    if (state.lessonState !== "demo" || timeline.spec.mode !== "watch") return;
+    previewRestore = null;
+  }
   cancelCountIn();
   cancelAnimationFrame(frame);
   clearTimeout(finishTimer);
@@ -196,6 +255,7 @@ export function playDemo(): void {
     running: true,
     lessonState: "demo",
     handsMode: "demo",
+    cameraAuto: true,
     subtitle: "お手本を聴いてみましょう",
   });
   frame = requestAnimationFrame(loop);
@@ -220,17 +280,24 @@ function playDemoNotes(timeline: ExerciseTimeline, playhead: number): void {
   if (event && slowedEventId !== event.noteId) {
     slowedEventId = event.noteId;
     setTimeScale(0.5);
-    useAppStore.getState().set({ camera: "closeup", subtitle: event.tip });
+    // カメラは動かさない。お手本のカメラは scene/demoCamera.ts が playhead から決める（CameraRig）
+    useAppStore.getState().set({ subtitle: event.tip });
   } else if (!event && slowedEventId) {
     slowedEventId = null;
     setTimeScale(1);
-    useAppStore.getState().set({ camera: "play" });
   }
 
   if (playhead > lastEnd(timeline) + 250) {
     cancelAnimationFrame(frame);
     stopClock();
     setTimeScale(1);
+    if (previewRestore) {
+      const restore = previewRestore;
+      previewRestore = null;
+      useAppStore.getState().set({ ...restore, running: false });
+      activeTimeline = null;
+      return; // Local replay never advances the server lesson.
+    }
     // お手本の後は、先生が次の課題を決めるまで待つ（開始ボタンは出さない）
     useAppStore.getState().set({
       running: false,
@@ -247,6 +314,13 @@ function playDemoNotes(timeline: ExerciseTimeline, playhead: number): void {
 }
 
 /** カウントインだけを取り消す。課題の差し替えや MIDI 切断時に使う。 */
+/** 目安の音（メトロノームとお手本の音）の予定を止める。 */
+function stopGuide(): void {
+  const transport = Tone.getTransport();
+  transport.stop();
+  transport.cancel(0);
+}
+
 export function cancelCountIn(): void {
   if (!countInTimer) return;
   clearTimeout(countInTimer);
@@ -262,6 +336,7 @@ export function cancelCountIn(): void {
 
 /** サーバー切断時など、送信を伴わずにすべての再生を止める。 */
 export function abortPlayback(): void {
+  previewRestore = null;
   cancelCountIn();
   cancelAnimationFrame(frame);
   clearTimeout(finishTimer);

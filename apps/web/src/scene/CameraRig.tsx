@@ -1,8 +1,10 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { PerspectiveCamera, Vector3 } from "three";
+import { getPlayheadMs } from "../midi/clock";
 import { useAppStore } from "../state/store";
 import type { CameraPreset } from "../types";
+import { DEMO_FOV, demoCameraAt } from "./demoCamera";
 import { KEYBOARD_EXTENT } from "./keyboardLayout";
 import { exerciseRange } from "./Notes";
 
@@ -48,6 +50,7 @@ function viewFor(preset: CameraPreset, centerX: number, spanX: number): View {
 
 /** 下部のダイアログが 3D の手やノーツを隠さないよう、描画の中心を画面の高さのこの割合だけ上へずらす。 */
 const VIEW_SHIFT_UP = 0.15;
+const DEFAULT_FOV = DEMO_FOV;
 
 export function CameraRig() {
   const camera = useThree((state) => state.camera);
@@ -73,18 +76,44 @@ export function CameraRig() {
   const range = useMemo(() => exerciseRange(timeline?.notes ?? []), [timeline]);
   const look = useRef(new Vector3(0, 0.02, -0.3));
   const goal = useRef(new Vector3());
+  const goalLook = useRef(new Vector3());
 
   useFrame(({ clock }, delta) => {
-    const centerX = range ? (range.minX + range.maxX) / 2 : 0;
-    const spanX = range ? range.maxX - range.minX : KEYBOARD_EXTENT.width;
-    const view = viewFor(preset, centerX, spanX);
-    // 待機中だけ、ゆっくり揺らぐ
-    const sway = running ? 0 : Math.sin(clock.elapsedTime * 0.3) * 0.01;
-    goal.current.copy(view.position).add(new Vector3(sway, sway * 0.4, 0));
-    const ease = 1 - Math.exp(-delta * 4.5); // 約 0.8 秒で追いつく
+    const state = useAppStore.getState();
+    // サーバーが始めたお手本のあいだだけ、カメラを自動で動かす（demoCamera.ts）。
+    // 終わったら、プリセットの構図へ同じ追従（約 0.8 秒）で戻る。切り替えで飛ばないよう、現在位置から追いかける。
+    const auto =
+      state.lessonState === "demo" &&
+      state.handsMode === "demo" &&
+      state.cameraAuto &&
+      !!state.timeline &&
+      state.timeline.notes.length > 0;
+    let fov = DEFAULT_FOV;
+    if (auto && state.timeline) {
+      const view = demoCameraAt(state.timeline, getPlayheadMs());
+      goal.current.set(view.position.x, view.position.y, view.position.z);
+      goalLook.current.set(view.target.x, view.target.y, view.target.z);
+      fov = view.fov;
+    } else {
+      const centerX = range ? (range.minX + range.maxX) / 2 : 0;
+      const spanX = range ? range.maxX - range.minX : KEYBOARD_EXTENT.width;
+      const view = viewFor(preset, centerX, spanX);
+      // 待機中だけ、ゆっくり揺らぐ
+      const sway = running ? 0 : Math.sin(clock.elapsedTime * 0.3) * 0.01;
+      goal.current.copy(view.position).add(new Vector3(sway, sway * 0.4, 0));
+      goalLook.current.copy(view.target);
+    }
+    const ease = 1 - Math.exp(-delta * (auto ? 5.5 : 4.5)); // 約 0.8 秒で追いつく
     camera.position.lerp(goal.current, ease);
-    look.current.lerp(view.target, ease);
+    look.current.lerp(goalLook.current, ease);
     camera.lookAt(look.current);
+    if (camera instanceof PerspectiveCamera) {
+      const next = camera.fov + (fov - camera.fov) * ease;
+      if (Math.abs(next - camera.fov) > 1e-4) {
+        camera.fov = next;
+        camera.updateProjectionMatrix();
+      }
+    }
   });
   return null;
 }

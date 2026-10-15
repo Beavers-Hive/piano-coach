@@ -51,7 +51,7 @@ REF_LATENT = _ref_env if _ref_env.lower() not in ("", "none") and Path(_ref_env)
 # MeanFlow の既定は 4 ステップ。空なら既定。A/B では 4〜32 で差が小さく、4 が最速だった。
 STEPS = int(os.environ["TTS_STEPS"]) if os.environ.get("TTS_STEPS") else None
 # 1.0 未満で話すテンポが速くなる（既定 0.9。1.0 だと 1 秒あたり約 5 モーラで間延びする）
-DURATION_SCALE = float(os.environ.get("TTS_DURATION_SCALE", "0.9"))
+DURATION_SCALE = float(os.environ.get("TTS_DURATION_SCALE", "0.8"))  # 小さいほど速い（0.9 だと会話としてやや遅かった）
 MAX_TEXT_CHARS = 400
 
 _runtime: InferenceRuntime | None = None
@@ -117,9 +117,19 @@ async def _keepalive() -> None:
 app = FastAPI(lifespan=lifespan)
 
 
+def _voice_profile() -> str:
+    """声の設定（参照音声・速さ・ステップ数・キャプション・seed）の識別子。
+    アプリ側が音声のキャッシュのキーに混ぜる。設定を変えたら、古い設定の音声を再利用しないため。"""
+    import hashlib
+
+    raw = f"{REF_LATENT}|{DURATION_SCALE}|{STEPS}|{CAPTION}|{DEFAULT_SEED}|{MODEL}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
+
+
 @app.get("/health")
 async def health():
     return {
+        "voice_profile": _voice_profile(),
         "ok": _runtime is not None,
         "model": MODEL,
         "ref_latent": REF_LATENT,

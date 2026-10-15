@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-from piano_coach.brain.base import BrainError, BrainEvent, BrainInput
+from piano_coach.brain.base import ActionReady, BrainError, BrainEvent, BrainInput
 from piano_coach.brain.claude import TagStreamParser, load_prompt
 
 
@@ -120,10 +120,31 @@ class CodexBrain:
         conversation = self.history + [{"role": "user", "content": text}]
         prompt = (self.system_prompt + "\nUse no tools. Return only <say>...</say><action>{...}</action>.\n"
                   + json.dumps(conversation, ensure_ascii=False))
+        hearing_message = text.startswith(("[SONG_LOADED]", "[HEARING_ANSWER]"))
+        prior_answers = sum(item["role"] == "user" and item["content"].startswith("[HEARING_ANSWER]") for item in self.history)
+        hearing = hearing_message and prior_answers < 1
+        model = os.environ.get("PIANO_COACH_CODEX_HEARING_MODEL", "gpt-6-luna") if hearing else None
+        if hearing:
+            # Hearing needs only the question contract, not the full exercise/planning examples.
+            prompt = (
+                "あなたは優しい日本語のピアノの先生です。ツールは使いません。"
+                "最初はピアノ経験を聞き、その回答後は何をひけるようになりたいかを聞きます。"
+                "一度に一問だけ、発話は質問を含む短い1文、40文字以内。ひくはひらがな。"
+                '返答は必ず <say>短い質問</say><action>{"type":"ask","question":{"id":"質問ID",'
+                '"text":"質問","options":["選択肢1","選択肢2"],"allowFree":true}}</action> の形式。'
+                "ヒアリングだけを行い、計画や課題は作らないでください。\n"
+                + json.dumps(conversation, ensure_ascii=False)
+            )
+        elif hearing_message:
+            prompt += "\nヒアリングは完了です。回答を使い、set_plan で指導計画を作ってください。"
         try:
-            response = await self._request(prompt)
+            response = await self._request(prompt, model=model, effort="none" if hearing else "low")
             events = TagStreamParser().feed(response, final=True)
-            from piano_coach.brain.base import ActionReady
+            if hearing and any(isinstance(event, ActionReady) and event.action.get("type") == "set_plan" for event in events):
+                # Ask Luna for hearing, but let the regular tutor design the plan.
+                # Do not emit the draft or store it in conversation history.
+                response = await self._request(prompt + "\nヒアリングは完了です。これまでの回答に基づき set_plan で指導計画を作ってください。")
+                events = TagStreamParser().feed(response, final=True)
             if not any(isinstance(event, ActionReady) for event in events):
                 raise ValueError("Codex response has no complete action")
             self.history = conversation + [{"role": "assistant", "content": response}]

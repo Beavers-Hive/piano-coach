@@ -17,6 +17,7 @@ from piano_coach.exercise.notation import MUSICXML_MEDIA_TYPE, timeline_to_music
 from piano_coach.exercise.registry import ExerciseTimelineCache
 from piano_coach.lesson.fakes import FakeVoiceService
 from piano_coach.lesson.orchestrator import LessonOrchestrator
+from piano_coach.lesson.store import LessonStore
 from piano_coach.paths import DATA_DIR, ensure_data_dirs
 from piano_coach.score.importer import ScoreRepository, rasterize_pages
 
@@ -28,9 +29,10 @@ def _fake_enabled(name: str) -> bool:
     return os.environ.get(name) == "1"
 
 
-def create_app(repository: ScoreRepository | None = None) -> FastAPI:
+def create_app(repository: ScoreRepository | None = None, lesson_store: LessonStore | None = None) -> FastAPI:
     repo = repository or ScoreRepository()
     exercises = ExerciseTimelineCache(capacity=20)
+    lessons = lesson_store or LessonStore()
     voice = FakeVoiceService() if _fake_enabled("PIANO_COACH_FAKE_TTS") else __import__("piano_coach.voice", fromlist=["VoiceService"]).VoiceService()
 
     @asynccontextmanager
@@ -51,7 +53,8 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
 
     @app.get("/api/songs")
     async def songs() -> dict:
-        return {"songs": [{"songId": score.songId, "title": score.title, "composer": score.composer} for score in repo.all()]}
+        return {"songs": [{"songId": score.songId, "title": score.title, "composer": score.composer,
+                           "progress": lessons.progress_for(score.songId)} for score in repo.all()]}
 
     @app.post("/api/songs")
     async def upload_song(file: UploadFile = File(...)) -> dict:
@@ -100,8 +103,10 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
     async def health() -> dict:
         if _fake_enabled("PIANO_COACH_FAKE_TTS"): return {"claude": not bool(os.environ.get("ANTHROPIC_API_KEY")), "tts": True}
         try:
-            async with httpx.AsyncClient(timeout=.5) as client: tts_ok = (await client.get("http://127.0.0.1:8790/health")).is_success
-        except httpx.HTTPError: tts_ok = False
+            async with httpx.AsyncClient(timeout=.5) as client:
+                reply = await client.get(f"{voice.tts_url}/health")
+                tts_ok = reply.is_success and reply.json().get("ok") is True
+        except (httpx.HTTPError, ValueError): tts_ok = False
         return {"claude": not bool(os.environ.get("ANTHROPIC_API_KEY")), "tts": tts_ok}
 
     @app.websocket("/ws")
@@ -116,7 +121,7 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
         brain = None
         async def send(kind: str, payload: dict) -> None:
             async with send_lock: await websocket.send_json({"type": kind, "payload": payload})
-        lesson = LessonOrchestrator(send, voice=voice, exercise_cache=exercises)
+        lesson = LessonOrchestrator(send, voice=voice, exercise_cache=exercises, lesson_store=lessons)
 
         async def handle(kind: str, payload: dict) -> None:
             nonlocal brain
@@ -132,7 +137,8 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
                     except Exception as error:
                         log.warning("lesson brain unavailable: %s", error); lesson.set_brain(None)
                     pdf = repo.source_pdf(score.songId); pages = rasterize_pages(pdf, score.songId) if pdf else []
-                    await lesson.start(score, [f"/api/songs/{score.songId}/pages/{index}.png" for index in range(1, len(pages)+1)], pages)
+                    await lesson.start(score, [f"/api/songs/{score.songId}/pages/{index}.png" for index in range(1, len(pages)+1)], pages,
+                                       resume=bool(payload.get("resume", False)))
                 elif kind == "hearing.answer": await lesson.hearing_answer(payload.get("questionId", ""), payload.get("answer", ""))
                 elif kind == "voice.done": await lesson.voice_done(payload.get("utteranceId", ""))
                 elif kind == "practice.started": await lesson.practice_started(payload.get("exerciseId", ""), payload.get("exerciseVersion", -1))

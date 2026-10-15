@@ -22,6 +22,7 @@ export function SongIntro() {
             <li key={item}>{item}</li>
           ))}
         </ul>
+        {info.resumed && <p className="song-intro-resume">前回の続きから</p>}
       </div>
     </div>
   );

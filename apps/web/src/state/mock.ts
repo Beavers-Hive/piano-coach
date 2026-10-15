@@ -1,4 +1,4 @@
-import type { ExerciseTimeline } from "../types";
+import type { ExerciseTimeline, SavedProgress, SongEntry } from "../types";
 
 const names = [
   "D5",
@@ -56,6 +56,22 @@ export const mockTimeline: ExerciseTimeline = {
     finger: ([3, 1, 2, 3, 4, 5, 1, 2, 3, 1, 2, 3, 4, 5, 1, 2] as const)[index],
   })),
 };
-export const mockSongs = [
-  { songId: "minuet-g", title: "メヌエット ト長調", composer: "J. S. Bach" },
+export const mockSongs: SongEntry[] = [
+  {
+    songId: "minuet-g",
+    title: "メヌエット ト長調",
+    composer: "J. S. Bach",
+    progress: null,
+  },
 ];
+/** ?mock=1&ui=resume の再開カード用。「2 時間前に、5 ステップ中の 3 つ目まで進んだ」状態。 */
+export function mockSavedProgress(now = Date.now()): SavedProgress {
+  return {
+    stepIndex: 2,
+    stepCount: 5,
+    stepTitle: "両手でさいしょのフレーズ",
+    goal: "メヌエットの冒頭を、両手でなめらかに弾けるようになる",
+    updatedAt: new Date(now - 2 * 3_600_000 - 60_000).toISOString(),
+    finished: false,
+  };
+}

@@ -60,6 +60,10 @@ class ScriptedBrain:
             spec = body.get("exercise") or {"measures": [1, 8], "hand": "right", "tempoPercent": 60, "mode": "wait", "loop": 1, "metronome": True}
             yield SayDelta(text="いいね。今度は自分でひいてみよう。")
             yield ActionReady(action={"type": "start_exercise", "exercise": {**spec, "mode": "wait"}})
+        elif kind == "RESUME":
+            spec = body.get("currentExercise") or {"measures": [1, 8], "hand": "right", "tempoPercent": 60, "mode": "wait", "loop": 1, "metronome": True}
+            yield SayDelta(text="おかえりなさい。前回の続きからいこう😊")
+            yield ActionReady(action={"type": "start_exercise", "exercise": {**spec, "mode": "wait"}})
         elif kind == "ATTEMPT_RESULT":
             exercise = body.get("exercise") or {}
             summary = body.get("summary") or {}

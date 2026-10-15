@@ -112,3 +112,20 @@ export type Plan = {
   currentStepId: string | null;
 };
 export type WireMessage = { type: string; payload: Record<string, unknown> };
+/** GET /api/songs の progress（docs/contracts.md「途中からの再開」）。保存がない、または最後まで終えた曲は null。 */
+export type SavedProgress = {
+  /** いまのステップ（0 始まり） */
+  stepIndex: number;
+  stepCount: number;
+  stepTitle: string;
+  goal: string;
+  /** ISO 8601（UTC） */
+  updatedAt: string;
+  finished: boolean;
+};
+export type SongEntry = {
+  songId: string;
+  title: string;
+  composer: string;
+  progress: SavedProgress | null;
+};

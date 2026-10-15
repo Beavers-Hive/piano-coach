@@ -6,3 +6,17 @@ __pycache__/
 node_modules/
 .codex-tasks/
 data-e2e/
+
+# Local configuration and credentials (never publish)
+.claude/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json
+docs/reviews/*.log

@@ -37,6 +37,11 @@ export const IconCloseup = () => (
     <path d="m15 15 5 5M10.5 8v5M8 10.5h5" />
   </Svg>
 );
+export const IconFullscreen = () => (
+  <Svg>
+    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+  </Svg>
+);
 export const IconDemo = () => (
   <Svg size={16}>
     <path d="M7 5.5v13l11-6.5z" fill="currentColor" />

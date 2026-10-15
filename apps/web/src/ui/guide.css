@@ -1,0 +1,57 @@
+/* 合わせる目安の音の入り切り（右下の操作の並びに置く）。夜のコンサートホールの配色に合わせる。 */
+.guide-toggles {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  background: rgba(11, 10, 9, 0.8);
+  pointer-events: auto;
+}
+.guide-label {
+  padding-right: 4px;
+  color: var(--ink-3);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.guide-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(242, 237, 227, 0.05);
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.guide-chip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  opacity: 0.55;
+}
+.guide-chip.on {
+  background: var(--brass-dim);
+  color: var(--brass-hi);
+}
+.guide-chip.on i {
+  background: var(--brass);
+  opacity: 1;
+}
+.guide-chip:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.guide-toggles.idle .guide-label {
+  color: var(--ink-3);
+  opacity: 0.8;
+}

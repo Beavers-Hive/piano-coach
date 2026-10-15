@@ -9,6 +9,32 @@ import type {
   ScoreModel,
 } from "../types";
 
+const GUIDE_PREF_KEY = "piano-coach-guide";
+
+/** 演奏モードの音の目安（メトロノーム・お手本の音）の設定を、ブラウザに保存して引き継ぐ。 */
+function loadGuidePrefs(): { guideMetronome: boolean; guideNotes: boolean } {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GUIDE_PREF_KEY) ?? "{}");
+    return {
+      guideMetronome: saved.guideMetronome !== false,
+      guideNotes: saved.guideNotes !== false,
+    };
+  } catch {
+    return { guideMetronome: true, guideNotes: true };
+  }
+}
+
+export function saveGuidePrefs(prefs: {
+  guideMetronome: boolean;
+  guideNotes: boolean;
+}): void {
+  try {
+    localStorage.setItem(GUIDE_PREF_KEY, JSON.stringify(prefs));
+  } catch {
+    // 保存できない環境（プライベートウィンドウなど）では、その場の設定だけで続ける
+  }
+}
+
 export type HitKind = "perfect" | "good" | "miss" | "extra";
 export type ViewMode = "notes" | "score" | "both";
 type AppState = {
@@ -32,6 +58,15 @@ type AppState = {
   viewMode: ViewMode;
   plan?: Plan;
   subtitle: string;
+  generation: "thinking" | "voice" | null;
+  /** 字幕の新しい部分を、この時間（ミリ秒）で 1 文字ずつ出す。声の再生の長さに合わせる。未指定なら既定の速さ。 */
+  subtitleDurationMs?: number;
+  /** 字幕を更新するたびに増える番号。同じ文が続いても、タイプの演出をやり直すために使う。 */
+  subtitleSeq: number;
+  /** 演奏モード（自分でタイミングを合わせる）で、メトロノームを鳴らすか。 */
+  guideMetronome: boolean;
+  /** 演奏モードで、お手本の音（合わせる目安）を鳴らすか。 */
+  guideNotes: boolean;
   question?: {
     questionId: string;
     text: string;
@@ -44,6 +79,8 @@ type AppState = {
   waitingForStart: boolean;
   handsMode: "hidden" | "demo" | "ghost";
   camera: CameraPreset;
+  /** お手本の再生中、カメラを自動で動かす（既定 true）。false なら camera のプリセットで固定する。 */
+  cameraAuto: boolean;
   hit?: { pitch: number; kind: HitKind; at: number };
   combo: number;
   voiceLevel: number;
@@ -70,12 +107,16 @@ export const useAppStore = create<AppState>((set) => ({
   timeline: null,
   viewMode: "both",
   subtitle: "",
+  generation: null,
+  subtitleSeq: 0,
+  ...loadGuidePrefs(),
   fingers: {},
   pressed: new Set(),
   running: false,
   waitingForStart: false,
   handsMode: "hidden",
   camera: "overview",
+  cameraAuto: true,
   combo: 0,
   voiceLevel: 0,
   countInBeat: null,

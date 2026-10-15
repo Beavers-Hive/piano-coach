@@ -298,3 +298,28 @@ async def test_warmup_phrases_cached(tmp_path):
 async def test_warmup_survives_tts_down(tmp_path):
     v = make_service(tmp_path, FakeTTS(fail=httpx.ConnectError("x")))
     await v.warmup_phrases()  # 例外を出さない
+
+
+def test_cache_key_changes_with_voice_profile_but_not_without_one():
+    """話す速さなど声の設定を変えたら、古い設定の音声を使わない。profile なしは従来のキーのまま。"""
+    base = cache_key("ひいて", 1234)
+    assert cache_key("ひいて", 1234, "") == base
+    assert cache_key("ひいて", 1234, "a1b2c3d4") != base
+    assert cache_key("ひいて", 1234, "a1b2c3d4") != cache_key("ひいて", 1234, "ffffffff")
+
+
+async def test_gemini_batches_sentences_and_skips_paid_startup_warmup(tmp_path):
+    import json
+    requests = []
+    def handler(request):
+        if request.method == 'GET':
+            return httpx.Response(200,json={'ok':True,'model':'gemini-3.8-flash-tts','voice_profile':'gemini'})
+        requests.append(json.loads(request.content))
+        return httpx.Response(200,content=WAV)
+    voice = VoiceService(cache_dir=tmp_path,client=httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+    await voice.warmup_phrases()
+    assert requests == []
+    clips = await collect(voice.speak_text('one','いいね！次は右手で弾こう。'))
+    assert len(clips) == 1 and clips[0].last
+    assert len(requests) == 1
+    assert 'いいね！' in requests[0]['text'] and 'ひこう' in requests[0]['text']

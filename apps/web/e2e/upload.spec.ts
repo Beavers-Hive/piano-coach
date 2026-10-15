@@ -1,5 +1,6 @@
 import path from "node:path";
 import { expect, test } from "@playwright/test";
+import { dismissEntryResume, startFromBeginning } from "./helpers";
 
 // デモの最初の見せ場「PDF を渡すだけ」: PDF を選ぶと、曲が読み込まれて先生のヒアリングが始まる。
 test("uploading the Minuet PDF starts the lesson", async ({ page }) => {
@@ -11,7 +12,9 @@ test("uploading the Minuet PDF starts the lesson", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "音声を有効にして準備する" }).click();
   await page.getByRole("button", { name: "レッスンへ進む" }).click();
+  await dismissEntryResume(page);
   await page.locator('input[type="file"]').setInputFiles(pdf);
+  await startFromBeginning(page);
   await expect(page.locator(".question")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator(".state")).toContainText("hearing");
 });

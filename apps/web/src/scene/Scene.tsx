@@ -1,8 +1,4 @@
-import {
-  Environment,
-  Lightformer,
-  MeshReflectorMaterial,
-} from "@react-three/drei";
+import { Environment, Lightformer } from "@react-three/drei";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
 import { useRef } from "react";
@@ -73,7 +69,7 @@ export function PianoScene() {
   return (
     <Canvas
       shadows
-      dpr={[1, 2]}
+      dpr={[1, 1.25]}
       camera={{ position: [0, 0.72, 1.18], fov: 38 }}
       gl={{ toneMapping: ACESFilmicToneMapping, toneMappingExposure: EXPOSURE }}
     >
@@ -89,11 +85,7 @@ export function PianoScene() {
       <TeacherOrb />
       <mesh rotation-x={-Math.PI / 2} position={[0, -0.07, 0]} receiveShadow>
         <planeGeometry args={[6, 6]} />
-        <MeshReflectorMaterial
-          blur={[200, 70]}
-          resolution={512}
-          mixBlur={1}
-          mixStrength={18}
+        <meshStandardMaterial
           roughness={0.32}
           color="#0b0907"
           metalness={0.78}
@@ -117,7 +109,7 @@ export function PianoScene() {
         />
       </Environment>
       <CameraRig />
-      <EffectComposer>
+      <EffectComposer multisampling={0}>
         {/* Bloom は控えめに。ノーツと判定ラインのような、色が 1 を超えるものだけが光る */}
         <Bloom
           intensity={0.55}

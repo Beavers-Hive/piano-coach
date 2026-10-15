@@ -76,3 +76,8 @@ cd apps/web && PIANO_COACH_REAL=1 npx playwright test -c playwright.real.config.
 | 3D が真っ黒に見える | Claude デスクトップアプリのブラウザペインが非表示だと、スクリーンショットが黒くなる（実際の Chrome では問題ない） |
 | MIDI が使えない | Chrome で MIDI の許可を確認する。PC のキーボード（A〜K、W/E/T/Y/U）でも演奏できる |
 | Hugging Face の 401 エラー | `HF_HUB_DISABLE_IMPLICIT_TOKEN=1` を付けて TTS を起動する |
+
+## クレジット
+- **3D の手のモデル**: [WebXR Input Profiles](https://github.com/immersive-web/webxr-input-profiles) の generic-hand（MIT、Copyright (c) 2019 Amazon）。`apps/web/public/models/hand/`（詳細とライセンス全文もそこにある）
+- ピアノ音源: Salamander Grand Piano（CC-BY）
+- デモ曲: J. S. Bach「メヌエット ト長調」（パブリックドメイン）

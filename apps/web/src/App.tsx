@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cancelVoice, configureVoice, flushVoice } from "./audio/voice";
 import {
   abortPlayback,
@@ -11,11 +11,20 @@ import {
 import { initialiseMidi, setMidiDisconnectHandler } from "./midi/MidiInput";
 import { setTimeScale } from "./midi/clock";
 import { PianoScene } from "./scene/Scene";
-import { mockSongs, mockTimeline } from "./state/mock";
-import type { ScoreModel } from "./types";
+import { mockSavedProgress, mockSongs, mockTimeline } from "./state/mock";
+import type { ScoreModel, SongEntry } from "./types";
 import { useAppStore } from "./state/store";
 import { connectSocket, send } from "./state/ws";
+import { isFullscreenShortcut, toggleFullscreen } from "./ui/fullscreen";
 import { Hud } from "./ui/Hud";
+import { setResumeNext } from "./ui/introState";
+import { ResumePrompt } from "./ui/ResumePrompt";
+import {
+  closeResumePrompt,
+  newestResumable,
+  resumeTargetOf,
+  showResumePrompt,
+} from "./ui/resumeState";
 import { Setup } from "./ui/Setup";
 import { Toasts } from "./ui/Toasts";
 import { ScorePanel } from "./ui/ScorePanel";
@@ -49,9 +58,10 @@ declare global {
 
 export default function App() {
   const [entered, setEntered] = useState(false);
-  const [songs, setSongs] = useState<
-    { songId: string; title: string; composer: string }[]
-  >([]);
+  const [songs, setSongs] = useState<SongEntry[]>([]);
+  // 最新の曲一覧（曲を選んだときの判定用。保存済みの進捗はレッスン中に変わる）
+  const songsRef = useRef<SongEntry[]>([]);
+  songsRef.current = songs;
   const mock = new URLSearchParams(location.search).get("mock") === "1";
   const running = useAppStore((state) => state.running);
   const set = useAppStore((state) => state.set);
@@ -84,21 +94,38 @@ export default function App() {
       cancelCountIn();
       stopPractice(true);
     });
+    // PC キーボードで鍵盤を弾く。Cmd/Ctrl/Alt を押しているときは弾かない
+    // （以前は F キーを握りつぶしていて、Cmd+Shift+F などのショートカットがブラウザに届かなかった）。
+    const heldPcKeys = new Set<string>();
     const down = (event: KeyboardEvent) => {
+      if (isFullscreenShortcut(event)) {
+        event.preventDefault();
+        if (!event.repeat) void toggleFullscreen();
+        return;
+      }
       if (
         event.repeat ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
         event.target instanceof HTMLInputElement ||
-        event.target instanceof HTMLTextAreaElement
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
       )
         return;
-      const pitch = pcKeys[event.key.toLowerCase()];
+      const key = event.key.toLowerCase();
+      const pitch = pcKeys[key];
       if (pitch === undefined) return;
       event.preventDefault();
+      heldPcKeys.add(key);
       input(pitch, 100, true, performance.now());
     };
     const up = (event: KeyboardEvent) => {
-      const pitch = pcKeys[event.key.toLowerCase()];
-      if (pitch !== undefined) input(pitch, 0, false, performance.now());
+      const key = event.key.toLowerCase();
+      const pitch = pcKeys[key];
+      // 弾いた鍵だけを離す（修飾キー付きで無視した押下の離しを、音の終わりとして扱わない）
+      if (pitch !== undefined && heldPcKeys.delete(key))
+        input(pitch, 0, false, performance.now());
     };
     addEventListener("keydown", down);
     addEventListener("keyup", up);
@@ -121,10 +148,10 @@ export default function App() {
       cancelVoice();
     };
     addEventListener("piano-ws-disconnected", disconnected);
-    addEventListener("piano-exercise-changed", cancelCountIn);
+    addEventListener("piano-exercise-changed", abortPlayback);
     return () => {
       removeEventListener("piano-ws-disconnected", disconnected);
-      removeEventListener("piano-exercise-changed", cancelCountIn);
+      removeEventListener("piano-exercise-changed", abortPlayback);
     };
   }, []);
 
@@ -175,17 +202,31 @@ export default function App() {
         lessonState: "briefing",
         camera: "play",
       });
-      return playMockUi(new URLSearchParams(location.search).get("ui"), set);
+      return playMockUi(new URLSearchParams(location.search).get("ui"), set, {
+        setSongs,
+      });
     }
     connectSocket();
-    void fetch("/api/songs")
-      .then((response) => response.json())
-      .then((data) => setSongs(data.songs ?? []))
-      .catch(() =>
-        set({
-          error: "サーバーに接続できません。?mock=1 なら単独で試せます。",
-        }),
-      );
+    // 開発時の StrictMode は effect を 2 回走らせる。1 回目の結果は捨てる（カードが二重に出ないように）
+    let cancelled = false;
+    void fetchSongs()
+      .then((list) => {
+        if (cancelled) return;
+        setSongs(list);
+        // 準備画面を終えた直後。レッスンがまだ始まっていなければ、いちばん新しい続きを尋ねる
+        const target = newestResumable(list);
+        if (target && useAppStore.getState().lessonState === "idle")
+          showResumePrompt(target);
+      })
+      .catch(() => {
+        if (!cancelled)
+          set({
+            error: "サーバーに接続できません。?mock=1 なら単独で試せます。",
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [entered, mock, set]);
 
   useEffect(() => {
@@ -212,15 +253,45 @@ export default function App() {
     };
   }, []);
 
-  const chooseSong = (songId: string) => {
-    if (mock) {
-      set({
-        timeline: { ...mockTimeline, exerciseId: songId },
-        waitingForStart: true,
-      });
-      return;
-    }
-    send("lesson.start", { songId });
+  const startLesson = useCallback(
+    (songId: string, resume: boolean) => {
+      setResumeNext(resume);
+      if (mock) {
+        set({
+          timeline: { ...mockTimeline, exerciseId: songId },
+          waitingForStart: true,
+          ...(resume ? { score: mockScore() } : {}),
+        });
+        return;
+      }
+      send("lesson.start", resume ? { songId, resume: true } : { songId });
+    },
+    [mock, set],
+  );
+  // 曲を選んだ（または PDF を渡した）とき。保存済みの進捗があれば、先に続きから始めるかを尋ねる
+  const chooseSong = useCallback(
+    async (songId: string) => {
+      let list = songsRef.current;
+      if (!mock) {
+        // 保存済みの進捗は、レッスン中や PDF の取り込みで変わるので、一覧を取り直して確認する
+        try {
+          list = await fetchSongs();
+          setSongs(list);
+        } catch {
+          // 取れなければ、手元の一覧で判断する
+        }
+      }
+      const target = resumeTargetOf(
+        list.find((song) => song.songId === songId),
+      );
+      if (target) showResumePrompt(target);
+      else startLesson(songId, false);
+    },
+    [mock, startLesson],
+  );
+  const answerResume = (songId: string, resume: boolean) => {
+    closeResumePrompt();
+    startLesson(songId, resume);
   };
   return (
     <>
@@ -228,7 +299,8 @@ export default function App() {
         <div className="app">
           <PianoScene />
           <ScorePanel />
-          <Hud songs={songs} onSong={chooseSong} />
+          <Hud songs={songs} onSong={(id) => void chooseSong(id)} />
+          <ResumePrompt onChoose={answerResume} />
         </div>
       ) : (
         <Setup onBegin={() => setEntered(true)} />
@@ -238,13 +310,24 @@ export default function App() {
   );
 }
 
+async function fetchSongs(): Promise<SongEntry[]> {
+  const response = await fetch("/api/songs");
+  const data = (await response.json()) as { songs?: SongEntry[] };
+  // サーバーが progress を返さない古い版でも動くよう、欠けていれば null にそろえる
+  return (data.songs ?? []).map((song) => ({
+    ...song,
+    progress: song.progress ?? null,
+  }));
+}
+
 /**
  * ?mock=1&ui=… で、画面ごとの状態を再現する（見た目の撮影と確認用）。カンマで組み合わせられる。
- * dialogue / question / plan / result / countin / drill / playing / error / title
+ * dialogue / question / plan / result / countin / drill / playing / error / title / resume
  */
 function playMockUi(
   ui: string | null,
   set: (patch: Partial<AppStateLike>) => void,
+  hooks: { setSongs: (songs: SongEntry[]) => void },
 ) {
   if (!ui) return;
   const timers: number[] = [];
@@ -314,6 +397,24 @@ function playMockUi(
       case "plan":
         set({ plan });
         break;
+      case "resume": {
+        // 準備画面を終えた直後に「前回の続きから」を尋ねる状態（保存済みの進捗がある曲が 1 つ）
+        const songs = mockSongs.map((song) => ({
+          ...song,
+          progress: mockSavedProgress(),
+        }));
+        hooks.setSongs(songs);
+        set({
+          timeline: null,
+          lessonState: "idle",
+          waitingForStart: false,
+          camera: "overview",
+          subtitle: "",
+        });
+        const target = newestResumable(songs);
+        if (target) at(400, () => showResumePrompt(target));
+        break;
+      }
       case "title":
         // 曲の導入（タイトルカードと、幕が上がる照明）の確認用
         set({

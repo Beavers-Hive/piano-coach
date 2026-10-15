@@ -97,3 +97,23 @@ def test_cli_path_prefers_desktop_binary(monkeypatch):
     assert codex_executable() == "/desktop/codex"
     monkeypatch.setenv("PIANO_COACH_CODEX_BIN", "/custom/codex")
     assert codex_executable() == "/custom/codex"
+
+
+async def test_hearing_uses_luna_and_plan_uses_regular_tutor(monkeypatch):
+    brain = CodexBrain()
+    await brain.open(system_prompt='teacher')
+    calls = []
+    async def request(prompt, **kwargs):
+        model = kwargs.get('model')
+        calls.append((prompt, model))
+        if model == 'gpt-6-luna':
+            return '<say>経験は？</say><action>{"type":"ask"}</action>'
+        return '<say>計画です</say><action>{"type":"set_plan"}</action>'
+    monkeypatch.setattr(brain, '_request', request)
+    for message in ('[SONG_LOADED]\n{}', '[HEARING_ANSWER]\n{"answer":"はじめて"}', '[HEARING_ANSWER]\n{"answer":"右手"}'):
+        events = [e async for e in brain.send(message)]
+        assert len([e for e in events if isinstance(e, ActionReady)]) == 1
+    assert [model for _, model in calls] == ['gpt-6-luna', 'gpt-6-luna', None]
+    assert 'はじめて' in calls[-1][0] and '右手' in calls[-1][0]
+    assert len(calls) == 3  # No wasted Luna plan generation before Sol.
+    await brain.close()

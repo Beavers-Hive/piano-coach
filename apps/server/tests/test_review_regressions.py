@@ -130,3 +130,24 @@ async def test_aclose_cancels_owned_background_work():
     await lesson.aclose()
     assert cancelled.is_set()
     assert task.cancelled()
+
+
+@pytest.mark.asyncio
+async def test_agent_exercise_instruction_is_not_followed_by_a_duplicate_fixed_voice(monkeypatch, tmp_path):
+    from piano_coach.brain.scripted import ScriptedBrain
+    from piano_coach.lesson.fakes import FakeVoiceService
+    monkeypatch.setattr(orchestrator_module, 'DATA_DIR', tmp_path)
+    sent=[]
+    async def send(kind,payload):sent.append((kind,payload))
+    lesson=LessonOrchestrator(send,brain=ScriptedBrain(),voice=FakeVoiceService())
+    lesson.score=import_score(Path(__file__).parents[3]/'assets/scores/minuet-g')
+    lesson.state='reviewing'
+    action=await lesson._brain_turn('DEMO_FINISHED',{'exercise':{'measures':[1,2],'hand':'right','tempoPercent':60,'mode':'watch','loop':1,'metronome':True}})
+    assert action
+    clip=next(payload for kind,payload in sent if kind=='voice.clip')
+    # Playback may finish before the action reaches exercise.ready.
+    await lesson.voice_done(clip['utteranceId'])
+    await lesson.apply_action(action)
+    assert len([p for k,p in sent if k=='voice.clip']) == 1
+    assert lesson.awaiting_voice is None
+    assert any(k=='exercise.ready' for k,p in sent)

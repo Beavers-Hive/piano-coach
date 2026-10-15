@@ -46,9 +46,13 @@ class VoiceClip:
     last: bool
 
 
-def cache_key(tts_str: str, seed: int = DEFAULT_SEED) -> str:
-    """TTS に送る文字列 + seed の sha256 先頭 16 文字。"""
-    return hashlib.sha256(f"{tts_str}\n{seed}".encode("utf-8")).hexdigest()[:16]
+def cache_key(tts_str: str, seed: int = DEFAULT_SEED, profile: str = "") -> str:
+    """TTS に送る文字列 + seed（+ 声の設定の識別子）の sha256 先頭 16 文字。
+
+    profile は TTS サーバーの /health の voice_profile。話す速さや声の固定を変えたときに、
+    古い設定で作った音声のキャッシュを再利用しないために混ぜる（空なら従来のキー）。"""
+    suffix = f"\n{profile}" if profile else ""
+    return hashlib.sha256(f"{tts_str}\n{seed}{suffix}".encode("utf-8")).hexdigest()[:16]
 
 
 _END = object()
@@ -66,6 +70,9 @@ class VoiceService:
         self.tts_url = (tts_url or os.environ.get("PIANO_COACH_TTS_URL") or DEFAULT_TTS_URL).rstrip("/")
         self.cache_dir = Path(cache_dir or os.environ.get("PIANO_COACH_TTS_CACHE") or DEFAULT_CACHE_DIR)
         self.seed = seed
+        self._voice_profile: str | None = None
+        self._batch_utterances = False
+        self.last_error: str | None = None
         self.timeout_s = timeout_s
         self._client = client
         self._own_client = client is None
@@ -88,6 +95,7 @@ class VoiceService:
         最後のクリップだけ last=True にするため、クリップは「次の文が来る」か
         「ストリームが終わる」まで 1 つ保留する（合成の完了は待たない）。
         """
+        await self._profile()
         queue: asyncio.Queue = asyncio.Queue()
         reader = asyncio.create_task(self._read(text_stream, queue))
         seq = 0
@@ -127,6 +135,9 @@ class VoiceService:
         self._cancelled.add(utterance_id)
 
     async def warmup_phrases(self) -> None:
+        await self._profile()
+        if self._batch_utterances:
+            return  # Cloud TTS: do not spend requests on unsolicited startup audio.
         for phrase in WARMUP_PHRASES:
             tts_str = tts_text(phrase)
             try:
@@ -147,6 +158,15 @@ class VoiceService:
     async def _read(self, text_stream: AsyncIterator[str], queue: asyncio.Queue) -> None:
         splitter = SentenceSplitter()
         try:
+            if self._batch_utterances:
+                chunks = [chunk async for chunk in text_stream]
+                text = "".join(chunks)
+                # The bridge accepts at most 400 characters. Typical tutor turns
+                # fit in one request, instead of one request per sentence.
+                for start in range(0, len(text), 350):
+                    self._enqueue(queue, text[start:start + 350])
+                queue.put_nowait(_END)
+                return
             async for chunk in text_stream:
                 for sentence in splitter.feed(chunk):
                     self._enqueue(queue, sentence)
@@ -165,12 +185,27 @@ class VoiceService:
             return  # 空白・絵文字・記号だけの文は捨てる
         queue.put_nowait((sub, tts_text(sentence)))
 
+    async def _profile(self) -> str:
+        """TTS サーバーの声の設定の識別子。最初の 1 回だけ取得して覚える（取得できなければ空。次回また試す）。"""
+        if self._voice_profile is None:
+            try:
+                if self._client is None:
+                    self._client = httpx.AsyncClient(timeout=self.timeout_s)
+                reply = await self._client.get(f"{self.tts_url}/health", timeout=2.0)
+                reply.raise_for_status()
+                metadata = reply.json()
+                self._batch_utterances = str(metadata.get("model", "")).startswith("gemini-")
+                self._voice_profile = str(metadata.get("voice_profile") or "")
+            except Exception:  # noqa: BLE001  TTS が起動していない間は、従来のキーで続ける
+                return ""
+        return self._voice_profile
+
     def _path(self, key: str) -> Path:
         return self.cache_dir / f"{key}.wav"
 
     async def _synthesize(self, tts_str: str) -> str | None:
         """キャッシュを確認し、無ければ TTS サーバーで合成する。失敗・タイムアウトは None。"""
-        key = cache_key(tts_str, self.seed)
+        key = cache_key(tts_str, self.seed, await self._profile())
         path = self._path(key)
         url = f"/api/tts/{key}.wav"
         if path.exists() and path.stat().st_size > 0:
@@ -202,6 +237,13 @@ class VoiceService:
         r = await self._client.post(
             f"{self.tts_url}/synthesize", json={"text": tts_str, "seed": self.seed}, timeout=self.timeout_s
         )
+        if not r.is_success:
+            try:
+                self.last_error = str(r.json().get("detail", "音声合成に失敗しました"))
+            except (ValueError, AttributeError):
+                self.last_error = "音声合成に失敗しました"
+        else:
+            self.last_error = None
         r.raise_for_status()
         if not r.content.startswith(b"RIFF"):
             raise ValueError("TTS response is not a wav")

@@ -7,7 +7,8 @@ let socket: WebSocket | undefined;
 const pending: string[] = [];
 let disconnected = false;
 
-let lastSubtitleUtterance = "";
+/** 声のクリップが届いた発話の ID（字幕は声に合わせて出すので、字幕だけの代替表示をしない）。 */
+const voiceSpoke = new Set<string>();
 // 楽譜ページを 3D 空間に浮かべる状態（ScorePages.tsx）
 const PAGE_STATES = ["importing", "analyzing", "hearing", "planning"];
 
@@ -32,11 +33,27 @@ export function connectSocket(): void {
   };
   socket.onclose = handleSocketClose;
   socket.onerror = () =>
-    useAppStore.getState().set({ error: "サーバーに接続できません" });
+    useAppStore
+      .getState()
+      .set({ error: "サーバーに接続できません", generation: null });
 }
 
 export function send(type: string, payload: Record<string, unknown>): void {
   const message = JSON.stringify({ type, payload });
+  if (
+    socket &&
+    (socket.readyState === WebSocket.OPEN ||
+      socket.readyState === WebSocket.CONNECTING) &&
+    [
+      "lesson.start",
+      "hearing.answer",
+      "user.message",
+      "attempt.submit",
+      "demo.finished",
+    ].includes(type)
+  ) {
+    useAppStore.getState().set({ generation: "thinking" });
+  }
   if (socket?.readyState === WebSocket.OPEN) socket.send(message);
   else if (!disconnected && socket?.readyState === WebSocket.CONNECTING)
     pending.push(message);
@@ -48,6 +65,7 @@ export function handleSocketClose(): void {
   pending.length = 0;
   useAppStore.getState().set({
     running: false,
+    generation: null,
     waitingForStart: false,
     handsMode: "hidden",
     pressed: new Set(),
@@ -79,6 +97,13 @@ export function handleIncomingMessage({ type, payload }: WireMessage): void {
         state.pageImageUrls.length > 0 && PAGE_STATES.includes(lessonState);
       state.set({
         lessonState,
+        ...(["importing", "analyzing", "planning", "reviewing"].includes(
+          lessonState,
+        )
+          ? { generation: "thinking" as const }
+          : ["demo", "practicing", "finished", "idle"].includes(lessonState)
+            ? { generation: null }
+            : {}),
         camera: showingPages
           ? "score"
           : conversational.includes(lessonState)
@@ -92,6 +117,7 @@ export function handleIncomingMessage({ type, payload }: WireMessage): void {
         // 新しい読み込みが始まったら、前の曲のページは消す
         ...(state.lessonState === "importing" ? {} : { pageImageUrls: [] }),
         lessonState: "importing",
+        generation: "thinking",
         importProgress: {
           stage: payload.stage as "reading" | "analyzing" | "fingering",
           ratio: Number(payload.ratio) || 0,
@@ -120,23 +146,21 @@ export function handleIncomingMessage({ type, payload }: WireMessage): void {
       );
       break;
     case "agent.say": {
-      // 新しい発話が始まったら字幕を入れ替える（前の字幕や状態表示に付け足さない）
-      const utteranceId = String(payload.utteranceId);
-      const continuing = utteranceId === lastSubtitleUtterance;
-      lastSubtitleUtterance = utteranceId;
-      state.set({
-        subtitle: (continuing ? state.subtitle : "") + String(payload.delta),
-      });
+      // Text is displayed exclusively on audio playing / speech onstart.
+      if (!voiceSpoke.has(String(payload.utteranceId)))
+        state.set({ generation: "voice" });
       break;
     }
     case "voice.clip":
+      state.set({ generation: payload.last ? null : "voice" });
+      voiceSpoke.add(String((payload as { utteranceId: string }).utteranceId));
       enqueueVoice(payload as never);
       break;
     case "agent.ask":
-      state.set({ question: payload as never });
+      state.set({ question: payload as never, generation: null });
       break;
     case "plan.updated":
-      state.set({ plan: payload.plan as never });
+      state.set({ plan: payload.plan as never, generation: "thinking" });
       break;
     case "exercise.ready":
       if (typeof window !== "undefined") {
@@ -162,7 +186,7 @@ export function handleIncomingMessage({ type, payload }: WireMessage): void {
       });
       break;
     case "error":
-      state.set({ error: String(payload.message) });
+      state.set({ error: String(payload.message), generation: null });
       break;
     default:
       break;

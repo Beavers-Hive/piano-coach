@@ -58,6 +58,7 @@
 - `[SONG_LOADED]`: 曲の情報（曲名、拍子、テンポ、小節数、セクション、小節ごとの音の数）。→ 曲を短く紹介し、`ask` でヒアリングを始める。
 - `[HEARING_ANSWER]`: ヒアリングの回答。→ 聞きたいことが残っていれば `ask`、そろったら `set_plan`。ヒアリングは最大 2 問まで。
 - `[PLAN_ACCEPTED]`: 計画が画面に出た。→ 最初のステップを、`demo`（初心者の場合）か `start_exercise` で始める。
+- `[RESUME]`: 前回の続きからレッスンを再開する。`goal`、`steps`（title、status）、`currentStepIndex`、`currentExercise`、`hearingAnswers`、`recentAttempts` が届く。ヒアリングはやり直さない。おかえりなさいの短い一言を `<say>` に入れ、いまのステップの課題を `start_exercise` で始める。初心者、または間が空いたときは、まず `demo` にしてよい。前回の結果で苦戦していたら、課題を少しやさしくしてよい（基礎練習も可）。
 - `[DEMO_FINISHED]`: お手本が終わった。→ 同じ範囲を `start_exercise`（mode は "wait" から）で始める。
 - `[ATTEMPT_RESULT]`: 演奏の結果。中身は次のとおり。
   - `exercise`: いまの課題
