@@ -44,6 +44,10 @@ type AppState = {
   hit?: { pitch: number; kind: HitKind; at: number };
   combo: number;
   voiceLevel: number;
+  /** カウントイン中の残り拍数（3/4 拍子なら 3 → 2 → 1）。カウントイン中でなければ null。 */
+  countInBeat: number | null;
+  /** カウントインのテンポ（これから演奏させる bpm）。 */
+  countInBpm?: number;
   /** 最後に Web Speech の代替音声を使った時刻（Irodori が使えなかった）。 */
   fallbackVoiceAt?: number;
   error?: string;
@@ -68,6 +72,7 @@ export const useAppStore = create<AppState>((set) => ({
   camera: "overview",
   combo: 0,
   voiceLevel: 0,
+  countInBeat: null,
   set: (patch) => set(patch),
   press: (pitch, on) =>
     set((s) => {

@@ -111,9 +111,14 @@ function assignFingers(
       const previous = assigned[assigned.length - 1];
       const ascendingForHand =
         (note.pitch - previous.pitch) * (hand === "right" ? 1 : -1) > 0;
+      const descendingForHand =
+        (note.pitch - previous.pitch) * (hand === "right" ? 1 : -1) < 0;
+      // 親指くぐり: 親指以外の指のあと、音が（その手にとって）上がる方向へ親指をくぐらせる
       if (finger === 1 && previous.assignedFinger > 1 && ascendingForHand)
         inferred = "thumb_under";
-      else if (previous.assignedFinger === 1 && finger > 1 && ascendingForHand)
+      // 指越え: 親指のあと、音が下がる方向へ他の指が親指を越える
+      // （以前は「上がる方向」で判定していたため、G4(1)→A4(2) のような自然な上行まで指越えの動きになっていた）
+      else if (previous.assignedFinger === 1 && finger > 1 && descendingForHand)
         inferred = "finger_over";
     }
     assigned.push({ ...note, assignedFinger: finger, crossing: inferred });

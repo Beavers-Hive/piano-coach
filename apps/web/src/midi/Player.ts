@@ -52,15 +52,26 @@ function countIn(timeline: ExerciseTimeline): void {
   const state = useAppStore.getState();
   state.set({
     waitingForStart: false,
-    subtitle: "ワン、ツー、スリー…",
+    subtitle: "",
+    countInBeat: null,
+    countInBpm: Math.round(timeline.bpm),
     handsMode: "hidden",
   });
   const transport = Tone.getTransport();
   const beatSeconds = 60 / timeline.bpm;
   transport.stop();
   transport.cancel(0);
+  // カウントインは、これから演奏させるテンポ（tempoPercent を適用した bpm）で 1 小節ぶん数える。
+  // 画面の数字（3/4 拍子なら 3, 2, 1）も、クリックの音と同じ時刻に切り替える。
   for (let beat = 0; beat < timeline.beatsPerMeasure; beat += 1) {
-    transport.scheduleOnce((time) => metronome(time), beat * beatSeconds);
+    const remaining = timeline.beatsPerMeasure - beat;
+    transport.scheduleOnce((time) => {
+      metronome(time);
+      Tone.getDraw().schedule(
+        () => useAppStore.getState().set({ countInBeat: remaining }),
+        time,
+      );
+    }, beat * beatSeconds);
   }
   startClock(-timeline.countInMs);
   transport.start("+0.03");
@@ -83,6 +94,7 @@ function countIn(timeline: ExerciseTimeline): void {
     if (wait) pauseClock();
     useAppStore.getState().set({
       running: true,
+      countInBeat: null,
       lessonState: "practicing",
       handsMode: "ghost",
       subtitle: wait ? "次の音をひいてください" : "演奏中",
@@ -242,7 +254,9 @@ export function cancelCountIn(): void {
   Tone.getTransport().cancel(0);
   stopClock();
   activeTimeline = null;
-  useAppStore.getState().set({ waitingForStart: false, handsMode: "hidden" });
+  useAppStore
+    .getState()
+    .set({ waitingForStart: false, handsMode: "hidden", countInBeat: null });
 }
 
 /** サーバー切断時など、送信を伴わずにすべての再生を止める。 */

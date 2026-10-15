@@ -78,6 +78,29 @@ describe("computeHandPose", () => {
     expect(detectCrossings(score, {}, "right").get("R-4")).toBe("thumb_under");
   });
 
+  it("does not treat a natural ascent after the thumb as a finger-over", () => {
+    // メヌエットの出だし: D5(5) G4(1) A4(2) B4(3) C5(4)。G4→A4 は自然な上行で、指越えではない
+    const score = timeline([
+      note("R-1", 74, 0, 5),
+      note("R-2", 67, 600, 1),
+      note("R-3", 69, 900, 2),
+      note("R-4", 71, 1200, 3),
+      note("R-5", 72, 1500, 4),
+    ]);
+    expect([...detectCrossings(score, {}, "right").entries()]).toEqual([]);
+  });
+
+  it("detects a descending right-hand finger-over after the thumb", () => {
+    // C4(1) の次に B3(3) へ下がるとき、3 の指が親指を越える
+    const score = timeline([
+      note("R-1", 64, 0, 3),
+      note("R-2", 62, 300, 2),
+      note("R-3", 60, 600, 1),
+      note("R-4", 59, 900, 3),
+    ]);
+    expect(detectCrossings(score, {}, "right").get("R-4")).toBe("finger_over");
+  });
+
   it("reaches every key in a chord with its assigned finger", () => {
     const score = timeline([
       note("R-1", 60, 1000, 1),

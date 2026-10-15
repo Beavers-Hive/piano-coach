@@ -21,6 +21,8 @@ def load_prompt(name: str, fallback: str) -> str:
 # output_format を使うと、CLI は構造化出力のための内部ツールを 1 つだけ報告する。
 # それ以外のツール（claude.ai コネクタ等）が見えたら、安全のため処理を止める。
 STRUCTURED_OUTPUT_TOOLS = {"StructuredOutput"}
+FINGERING_MODEL = os.environ.get("PIANO_COACH_FINGERING_MODEL", "opus")
+FINGERING_EFFORT = os.environ.get("PIANO_COACH_FINGERING_EFFORT", "high")
 
 
 def _check_structured_tools(tools: list, kind: str) -> None:
@@ -189,7 +191,8 @@ class ClaudeBrain:
         user_input = "[FINGERING]\n" + compact_score
         if violations:
             user_input += "\nViolations to fix:\n" + "\n".join(violations)
-        options = ClaudeAgentOptions(system_prompt=prompt, model="sonnet", tools=[], strict_mcp_config=True,
+        # 運指は一度作ればキャッシュされるので、速さより質を優先して Opus（推論の深さ: 高）で設計する
+        options = ClaudeAgentOptions(system_prompt=prompt, model=FINGERING_MODEL, effort=FINGERING_EFFORT, tools=[], strict_mcp_config=True,
             setting_sources=[], include_partial_messages=True, max_turns=3, output_format={"type": "json_schema", "schema": schema})
         async with ClaudeSDKClient(options=options) as client:
             await client.query(user_input)
