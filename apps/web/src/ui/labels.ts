@@ -70,8 +70,8 @@ export function accuracyOf(summary: {
 }
 
 export function gradeOf(accuracy: number): { title: string; sub: string } {
-  if (accuracy >= 95) return { title: "Excellent", sub: "ほぼ完璧な演奏です" };
-  if (accuracy >= 80) return { title: "Great", sub: "とてもよく弾けています" };
-  if (accuracy >= 60) return { title: "Good", sub: "いい調子。あと少しです" };
-  return { title: "Keep going", sub: "ここからが練習の本番です" };
+  if (accuracy >= 95) return { title: "お見事", sub: "ほぼ完璧な演奏です" };
+  if (accuracy >= 80) return { title: "上出来", sub: "とてもよく弾けています" };
+  if (accuracy >= 60) return { title: "いい調子", sub: "あと少しで安定します" };
+  return { title: "もう一歩", sub: "ここからが練習の本番です" };
 }

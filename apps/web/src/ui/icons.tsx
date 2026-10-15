@@ -92,41 +92,26 @@ export const IconStar = () => (
   </svg>
 );
 
-/** ロゴの印。鍵盤のかたち（白鍵 4 本と黒鍵 3 本）。 */
+/** ロゴの印。鍵盤のかたち（白鍵と黒鍵）。真鍮色の細い線だけで描く。 */
 export const LogoMark = ({ size = 28 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
-    <defs>
-      <linearGradient id="lm-g" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stopColor="#7fe8ff" />
-        <stop offset="1" stopColor="#4a8dff" />
-      </linearGradient>
-    </defs>
-    <rect
-      x="2"
-      y="3"
-      width="28"
-      height="26"
-      rx="6"
-      fill="url(#lm-g)"
-      opacity=".16"
-    />
     <rect
       x="2.75"
       y="3.75"
       width="26.5"
       height="24.5"
-      rx="5.25"
+      rx="3"
       fill="none"
-      stroke="url(#lm-g)"
-      strokeWidth="1.5"
+      stroke="#c9a45c"
+      strokeWidth="1.4"
     />
     <path
-      d="M10.5 4v21M16 4v21M21.5 4v21"
-      stroke="#7fe8ff"
+      d="M10.6 17v11M16 17v11M21.4 17v11"
+      stroke="#c9a45c"
       strokeWidth="1"
-      opacity=".45"
+      opacity=".55"
     />
-    <rect x="8" y="4" width="5" height="13" rx="1.4" fill="#e9fbff" />
-    <rect x="19" y="4" width="5" height="13" rx="1.4" fill="#ff5fb0" />
+    <rect x="8" y="4" width="5.2" height="13" rx="1" fill="#c9a45c" />
+    <rect x="18.8" y="4" width="5.2" height="13" rx="1" fill="#c9a45c" />
   </svg>
 );

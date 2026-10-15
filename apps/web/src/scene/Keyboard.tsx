@@ -54,8 +54,8 @@ function PianoKey({ pitch }: { pitch: number }) {
                 ? "#ff1839"
                 : "#d7feff"
               : black
-                ? "#05070d"
-                : "#e9e6df"
+                ? "#070606"
+                : "#efe6d2"
           }
           roughness={black ? 0.18 : 0.38}
           metalness={black ? 0.52 : 0.08}
@@ -82,7 +82,7 @@ export function Keyboard() {
         receiveShadow
       >
         <meshPhysicalMaterial
-          color="#060913"
+          color="#0a0908"
           roughness={0.16}
           metalness={0.8}
           clearcoat={1}
@@ -93,8 +93,8 @@ export function Keyboard() {
       >
         <boxGeometry args={[KEYBOARD_EXTENT.width, 0.006, 0.014]} />
         <meshStandardMaterial
-          color="#790519"
-          emissive="#5b0010"
+          color="#4a3517"
+          emissive="#2c1f08"
           emissiveIntensity={1.4}
         />
       </mesh>

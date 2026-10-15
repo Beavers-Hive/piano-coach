@@ -10,7 +10,7 @@ async function enterLesson(page: Page) {
   await page.goto("/?mock=1");
   await page.getByRole("button", { name: /音声を有効/ }).click();
   await page.getByRole("button", { name: /レッスンへ進む/ }).click();
-  await expect(page.locator("canvas")).toBeVisible();
+  await expect(page.locator("canvas")).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(2500); // カメラの移動が落ち着くまで待つ
 }
 
@@ -32,6 +32,25 @@ test("visual: briefing renders and does not allow a manual demo", async ({
   ).toBeDisabled();
 
   expect(shaderErrors, shaderErrors.join("\n")).toEqual([]);
+});
+
+test("visual: score panel supports notes, score, and both modes", async ({
+  page,
+}) => {
+  await enterLesson(page);
+  await expect(page.getByTestId("score-panel")).toBeVisible();
+  await expect(page.locator(".score-svg svg").first()).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.screenshot({ path: `${SHOTS}/score-1-both.png` });
+
+  await page.getByRole("button", { name: "楽譜" }).click();
+  await expect(page.getByTestId("score-panel")).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/score-2-score-only.png` });
+
+  await page.getByRole("button", { name: "ノーツ" }).click();
+  await expect(page.getByTestId("score-panel")).toBeHidden();
+  await page.screenshot({ path: `${SHOTS}/score-3-notes-only.png` });
 });
 
 // サーバーが始めたお手本と同じ状態（?mock=1&demo=1）で、ホログラムの手を撮影する。
@@ -99,7 +118,7 @@ async function shootUi(
   await page.goto(`/?mock=1&${query}`);
   await page.getByRole("button", { name: /音声を有効/ }).click();
   await page.getByRole("button", { name: /レッスンへ進む/ }).click();
-  await expect(page.locator("canvas")).toBeVisible();
+  await expect(page.locator("canvas")).toBeVisible({ timeout: 30_000 });
   let elapsed = 0;
   let index = 0;
   for (const at of waits) {
@@ -164,7 +183,7 @@ test("visual ui: result card", async ({ page }) => {
 });
 
 test("visual ui: result card (low score) at 1280x720", async ({ page }) => {
-  await shootUi(page, "ui-5-result-low-720", "ui=result,low", [4300], {
+  await shootUi(page, "ui-5-result-low-720", "ui=result,low", [3300], {
     width: 1280,
     height: 720,
   });
@@ -183,4 +202,23 @@ test("visual ui: briefing (start button) at 1280x720", async ({ page }) => {
 
 test("visual ui: playing (status chip, combo)", async ({ page }) => {
   await shootUi(page, "ui-8-playing", "ui=playing", [3200]);
+});
+
+// 曲の導入。暗転 → 幕が上がる照明とともに「本日の曲」のカードが出て、約 4 秒で消える
+test("visual ui: song intro title card", async ({ page }) => {
+  await shootUi(page, "ui-9-title", "ui=title", [700, 1500, 2600, 3500, 5500]);
+});
+
+test("visual ui: song intro at 1280x720", async ({ page }) => {
+  await shootUi(page, "ui-9-title-720", "ui=title", [2600], {
+    width: 1280,
+    height: 720,
+  });
+});
+
+test("visual ui: count-in at 1280x720", async ({ page }) => {
+  await shootUi(page, "ui-4-countin-720", "ui=countin", [2520], {
+    width: 1280,
+    height: 720,
+  });
 });

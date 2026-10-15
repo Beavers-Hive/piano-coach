@@ -22,6 +22,7 @@
     "react-dom": "^19.1.1",
     "three": "^0.180.0",
     "tone": "^15.1.22",
+    "verovio": "^6.3.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

@@ -1,94 +1,206 @@
 /* ============================================================
-   演出まわり: ダイアログ、カウントイン、演奏結果、基礎練習バッジ、コンボ
+   演出まわり: 曲の導入、ダイアログ、カウントイン、演奏結果、基礎練習バッジ、コンボ
    ============================================================ */
+
+/* ---------- 曲の導入（本日の曲） ----------
+   演奏会のプログラムのように、小さな見出し・明朝の曲名・細い罫線で区切った一行。 */
+.song-intro {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  animation: fade-in 0.6s ease-out both;
+}
+.song-intro.leaving {
+  opacity: 0;
+  transition: opacity 0.6s ease-in;
+}
+/* 照明が上がり切るまでのあいだ、カードの背後を暗く落として、曲名を読みやすくする */
+.song-intro::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 55% 48% at 50% 46%,
+    rgba(11, 10, 9, 0.82),
+    rgba(11, 10, 9, 0.5) 60%,
+    transparent
+  );
+}
+.song-intro-card {
+  position: relative;
+  display: flex;
+  max-width: min(760px, 90vw);
+  flex-direction: column;
+  align-items: center;
+  margin-top: -40px;
+  text-align: center;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.8);
+}
+.song-intro-kicker {
+  margin: 0;
+  color: var(--brass);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  text-indent: 0.32em;
+  animation: rise-in 0.9s 0.1s var(--ease) both;
+}
+.song-intro-rule {
+  display: block;
+  width: 56px;
+  height: 1px;
+  margin: 18px 0 26px;
+  background: var(--brass);
+  transform-origin: center;
+  animation: rule-draw 0.9s 0.2s var(--ease) both;
+}
+.song-intro-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(48px, 7vw, 84px);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  text-indent: 0.1em;
+  animation: rise-in 1.1s 0.3s var(--ease) both;
+}
+.song-intro-composer {
+  margin: 14px 0 0;
+  color: var(--ink-2);
+  font-family: var(--serif);
+  font-size: 20px;
+  letter-spacing: 0.12em;
+  animation: rise-in 1s 0.55s var(--ease) both;
+}
+.song-intro-meta {
+  display: flex;
+  align-items: center;
+  margin: 34px 0 0;
+  padding: 11px 0;
+  border-top: 1px solid var(--brass-line);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  list-style: none;
+  animation: rise-in 1s 0.8s var(--ease) both;
+}
+.song-intro-meta li {
+  padding: 0 26px;
+}
+.song-intro-meta li + li {
+  border-left: 1px solid var(--line);
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+@keyframes rule-draw {
+  from {
+    opacity: 0;
+    transform: scaleX(0);
+  }
+}
 
 /* ---------- 画面下部のスタック（開始ボタン + ダイアログ / 状態表示） ---------- */
 .bottom-stack {
   position: absolute;
-  bottom: 28px;
-  left: 50%;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
-  width: min(880px, calc(100vw - 232px));
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  transform: translateX(-50%);
+  gap: 18px;
 }
 .bottom-stack > * {
   pointer-events: auto;
 }
+.bottom-stack > .start:last-child,
+.bottom-stack > .status-chip {
+  margin-bottom: 28px;
+}
 
-/* ---------- ノベルゲーム風のダイアログ ---------- */
+/* ---------- 先生のダイアログ ----------
+   ノベルゲームの構成のまま、深い黒の帯に、上辺の真鍮色の細い線。セリフは明朝。 */
 .dialogue {
   position: relative;
   width: 100%;
-  min-height: 132px;
-  padding: 36px 48px 30px 44px;
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  background:
-    linear-gradient(180deg, rgba(20, 40, 72, 0.5), rgba(6, 12, 26, 0.72)),
-    var(--glass);
-  backdrop-filter: blur(20px) saturate(1.4);
-  box-shadow:
-    0 24px 70px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  padding: 24px 0 34px;
+  border-top: 1px solid var(--brass-line);
+  background: linear-gradient(180deg, rgba(9, 8, 7, 0.93), rgba(7, 6, 5, 0.98));
   animation: dialogue-in 0.5s var(--ease) both;
+}
+/* 上辺の線は、中央がやや明るい */
+.dialogue::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--brass) 35%,
+    var(--brass-hi) 50%,
+    var(--brass) 65%,
+    transparent
+  );
 }
 @keyframes dialogue-in {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(14px);
   }
 }
+.dialogue-inner {
+  position: relative;
+  width: min(920px, calc(100vw - 500px));
+  min-width: 560px;
+  margin: 0 auto;
+}
 .dialogue-name {
-  position: absolute;
-  top: -17px;
-  left: 28px;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 6px 22px 6px 15px;
-  border: 1px solid rgba(166, 241, 255, 0.55);
-  border-radius: 11px;
-  background: linear-gradient(120deg, #1790bd, #3d63d8);
-  box-shadow:
-    0 8px 22px rgba(30, 110, 220, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.3em;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  gap: 14px;
+  margin-bottom: 8px;
+  color: var(--brass);
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.4em;
 }
-.dialogue-name i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 0 10px #fff;
+.dialogue-name::after {
+  content: "";
+  width: 36px;
+  height: 1px;
+  background: var(--brass-line);
 }
 .dialogue .subtitle {
   margin: 0;
   color: var(--ink);
-  font-size: 24px;
+  font-family: var(--serif);
+  font-size: 25px;
   font-weight: 500;
-  line-height: 1.75;
-  letter-spacing: 0.045em;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+  line-height: 1.8;
+  letter-spacing: 0.05em;
   /* 2 行ぶんは常に確保して、文字が増えても枠が跳ねないようにする */
-  min-height: calc(2 * 1.75em);
+  min-height: calc(2 * 1.8em);
 }
 .untyped {
   visibility: hidden;
 }
 .dialogue-next {
   position: absolute;
-  right: 26px;
-  bottom: 14px;
-  color: var(--cyan);
-  font-size: 13px;
+  right: 0;
+  bottom: -14px;
+  color: var(--brass);
+  font-size: 11px;
   opacity: 0;
-  text-shadow: 0 0 10px var(--cyan);
 }
 .dialogue-next.on {
   animation: next-blink 1.1s ease-in-out infinite;
@@ -105,68 +217,68 @@
   }
 }
 
-/* 先生が話していないときの、控えめな状態表示 */
+/* 先生が話していないときの、控えめな状態表示（ドット + 短文のチップ） */
 .status-chip {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 18px 8px 14px;
+  padding: 7px 18px 7px 14px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: var(--glass);
-  backdrop-filter: var(--blur);
+  background: rgba(11, 10, 9, 0.82);
   color: var(--ink-2);
   font-size: 13px;
-  letter-spacing: 0.06em;
   animation: fade-in 0.5s var(--ease) both;
 }
 .status-chip i {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--cyan);
-  box-shadow: 0 0 10px var(--cyan);
+  background: var(--brass);
   animation: blink 1.8s ease-in-out infinite;
 }
 
-/* 鍵盤を押してスタート */
+/* 鍵盤を押してスタート。単色の真鍮。光らせず、静かな輪だけを広げる */
 .start {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 13px 30px 13px 24px;
-  border: 1px solid var(--cyan-hi);
-  border-radius: 999px;
-  background: linear-gradient(
-    120deg,
-    rgba(23, 144, 189, 0.85),
-    rgba(61, 99, 216, 0.85)
-  );
-  backdrop-filter: var(--blur);
-  color: #fff;
+  padding: 12px 30px 12px 24px;
+  border: 1px solid var(--brass);
+  border-radius: var(--r-s);
+  background: var(--brass);
+  color: #17120a;
   font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  animation: start-pulse 2.2s ease-out infinite;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.start::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border: 1px solid var(--brass);
+  border-radius: var(--r-s);
+  pointer-events: none;
+  animation: start-ring 2.4s ease-out infinite;
 }
 .start:hover:not(:disabled) {
-  background: linear-gradient(120deg, #1ba6d8, #4a74f0);
-  transform: translateY(-2px);
+  border-color: var(--brass-hi);
+  background: var(--brass-hi);
 }
-@keyframes start-pulse {
+@keyframes start-ring {
   0% {
-    box-shadow:
-      0 0 0 0 rgba(98, 221, 255, 0.55),
-      0 10px 34px rgba(30, 130, 220, 0.5);
+    opacity: 0.5;
+    transform: scale(1);
   }
   100% {
-    box-shadow:
-      0 0 0 22px rgba(98, 221, 255, 0),
-      0 10px 34px rgba(30, 130, 220, 0.5);
+    opacity: 0;
+    transform: scale(1.18, 1.5);
   }
 }
 
-/* ---------- カウントイン ---------- */
+/* ---------- カウントイン ----------
+   明朝の大きな数字と、指揮者のタクトのような細い円弧。 */
 .countin {
   position: absolute;
   top: 44%;
@@ -182,106 +294,126 @@
   z-index: -1;
   top: 50%;
   left: 50%;
-  width: 640px;
-  height: 640px;
+  width: 620px;
+  height: 620px;
   transform: translate(-50%, -54%);
   background: radial-gradient(
     circle,
-    rgba(3, 5, 13, 0.6),
-    rgba(3, 5, 13, 0) 68%
+    rgba(11, 10, 9, 0.72),
+    rgba(11, 10, 9, 0) 68%
   );
 }
 .countin-stage {
   position: relative;
   display: grid;
-  width: 300px;
+  width: 260px;
   height: 260px;
   place-items: center;
 }
+.countin-arc {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.countin-arc circle {
+  fill: none;
+  stroke-width: 1;
+}
+.countin-arc .track {
+  stroke: var(--line);
+}
+.countin-arc .sweep {
+  stroke: var(--brass);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  transform: rotate(-90deg);
+  transform-origin: 130px 130px;
+  animation: count-sweep var(--beat, 0.6s) linear both;
+}
+.countin-baton {
+  position: absolute;
+  inset: 0;
+  animation: count-baton var(--beat, 0.6s) linear both;
+}
+.countin-baton i {
+  position: absolute;
+  top: 8px;
+  left: calc(50% - 4px);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brass-hi);
+}
 .countin-digit {
-  color: #fff;
-  font-size: 220px;
-  font-weight: 800;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 190px;
+  font-weight: 500;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  text-shadow:
-    0 0 28px rgba(98, 221, 255, 0.85),
-    0 0 90px rgba(74, 141, 255, 0.55),
-    0 6px 0 rgba(0, 20, 40, 0.5);
+  text-shadow: 0 4px 40px rgba(0, 0, 0, 0.7);
   animation: count-pop var(--beat, 0.6s) var(--ease) both;
 }
-.countin-ring {
-  position: absolute;
-  width: 220px;
-  height: 220px;
-  border: 2px solid var(--cyan);
-  border-radius: 50%;
-  box-shadow:
-    0 0 26px rgba(98, 221, 255, 0.6),
-    inset 0 0 26px rgba(98, 221, 255, 0.35);
-  animation: count-ring var(--beat, 0.6s) cubic-bezier(0.1, 0.7, 0.3, 1) both;
-}
-.countin-ring.second {
-  border-color: var(--magenta);
-  box-shadow: 0 0 26px rgba(255, 95, 176, 0.45);
-  animation-delay: calc(var(--beat, 0.6s) * 0.12);
-}
 .countin-tempo {
-  margin-top: 4px;
-  padding: 5px 16px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--glass);
-  backdrop-filter: var(--blur);
+  margin-top: 6px;
   color: var(--ink-2);
-  font-size: 14px;
-  font-weight: 600;
+  font-family: var(--serif);
+  font-size: 17px;
   letter-spacing: 0.14em;
   font-variant-numeric: tabular-nums;
 }
 .countin-tempo span {
-  color: var(--cyan);
-  font-size: 17px;
+  color: var(--brass);
+  font-size: 20px;
 }
 @keyframes count-pop {
   0% {
     opacity: 0;
-    transform: scale(1.8);
-    filter: blur(10px);
+    transform: scale(1.12);
   }
-  14% {
+  16% {
     opacity: 1;
     transform: scale(1);
-    filter: blur(0);
   }
-  62% {
+  72% {
     opacity: 1;
-    transform: scale(0.96);
   }
   100% {
     opacity: 0;
-    transform: scale(0.78);
+    transform: scale(0.97);
   }
 }
-@keyframes count-ring {
-  0% {
-    opacity: 0.9;
-    transform: scale(0.55);
+@keyframes count-sweep {
+  to {
+    stroke-dashoffset: 0;
   }
-  100% {
+}
+@keyframes count-baton {
+  from {
+    opacity: 1;
+    transform: rotate(0);
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
     opacity: 0;
-    transform: scale(1.5);
+    transform: rotate(360deg);
   }
 }
 
-/* ---------- 演奏結果のカード ---------- */
+/* ---------- 演奏結果のカード（成績表） ---------- */
 .result-layer {
   position: absolute;
   inset: 0;
   background: radial-gradient(
     ellipse at 50% 46%,
-    rgba(3, 5, 13, 0.1),
-    rgba(3, 5, 13, 0.62)
+    rgba(11, 10, 9, 0.25),
+    rgba(11, 10, 9, 0.7)
   );
   animation: fade-in 0.5s ease-out both;
 }
@@ -291,22 +423,14 @@
 }
 .result {
   position: absolute;
-  top: calc(50% - 30px);
+  top: calc(50% + 10px);
   left: 50%;
-  width: min(660px, 92vw);
-  padding: 26px 40px 30px;
-  overflow: hidden;
+  width: min(700px, 92vw);
+  padding: 26px 44px 22px;
   transform: translate(-50%, -50%);
-  border: 1px solid var(--line-hi);
-  border-radius: 28px;
-  background:
-    radial-gradient(
-      ellipse 80% 60% at 20% 0%,
-      rgba(98, 221, 255, 0.14),
-      transparent 70%
-    ),
-    var(--glass-hi);
-  backdrop-filter: blur(24px) saturate(1.4);
+  border-top: 1px solid var(--brass);
+  border-bottom: 1px solid var(--line);
+  background: rgba(14, 13, 11, 0.96);
   box-shadow: var(--shadow-l);
   cursor: pointer;
   animation: result-in 0.6s var(--ease) both;
@@ -314,230 +438,198 @@
 .result.leaving {
   animation: result-out 0.45s ease-in both;
 }
-.result.top {
-  border-color: rgba(255, 140, 200, 0.55);
-  box-shadow:
-    var(--shadow-l),
-    0 0 60px rgba(255, 95, 176, 0.2);
-}
 @keyframes result-in {
   from {
     opacity: 0;
-    transform: translate(-50%, calc(-50% + 28px)) scale(0.93);
+    transform: translate(-50%, calc(-50% + 20px));
   }
 }
 @keyframes result-out {
   to {
     opacity: 0;
-    transform: translate(-50%, calc(-50% - 14px)) scale(0.98);
+    transform: translate(-50%, calc(-50% - 10px));
   }
 }
-.result-main {
+.result-head {
   display: flex;
-  align-items: center;
-  gap: 38px;
-  margin-top: 14px;
+  align-items: baseline;
+  justify-content: space-between;
 }
-.result-ring {
-  position: relative;
+.result-head small {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.result-main {
   display: grid;
-  width: 172px;
-  height: 172px;
-  flex: none;
-  place-items: center;
+  grid-template-columns: 1fr 1fr;
+  gap: 44px;
+  margin-top: 16px;
 }
-.result-ring svg {
-  position: absolute;
-  inset: 0;
-  transform: rotate(-90deg);
-}
-.result-ring circle {
-  fill: none;
-  stroke-width: 6;
-}
-.result-ring .track {
-  stroke: rgba(255, 255, 255, 0.08);
-}
-.result-ring .bar {
-  stroke: url(#ring-g);
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 6px rgba(98, 221, 255, 0.7));
+.result-score {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding-top: 10px;
 }
 .result-pct {
   display: flex;
   align-items: baseline;
-  margin-top: -8px;
+  font-family: var(--serif);
   font-variant-numeric: tabular-nums;
+  line-height: 0.95;
 }
 .result-pct b {
-  font-size: 58px;
-  font-weight: 800;
-  line-height: 1;
+  font-size: 124px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 .result-pct span {
-  margin-left: 2px;
+  margin-left: 6px;
   color: var(--ink-2);
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 30px;
 }
-.result-ring small {
+.result-meter {
+  position: relative;
+  height: 1px;
+  margin: 14px 0 0;
+  background: var(--line);
+}
+.result-meter i {
   position: absolute;
-  bottom: 38px;
+  top: -0.5px;
+  left: 0;
+  height: 2px;
+  background: var(--brass);
+}
+.result-score small {
+  margin-bottom: 6px;
   color: var(--ink-3);
-  font-size: 11px;
-  letter-spacing: 0.3em;
+  font-size: 12px;
+  letter-spacing: 0.2em;
 }
 .result-side {
   min-width: 0;
-  flex: 1;
 }
 .result-grade {
-  margin: 0;
-  font-size: 44px;
-  font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: 0.02em;
-  background: linear-gradient(100deg, #fff, var(--cyan-hi) 55%, var(--cyan));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  margin: 4px 0 0;
+  font-family: var(--serif);
+  font-size: 46px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: 0.08em;
 }
 .result.top .result-grade {
-  background: linear-gradient(100deg, #fff, var(--cyan-hi) 40%, #ff8ec6);
-  -webkit-background-clip: text;
-  background-clip: text;
+  color: var(--brass-hi);
 }
 .result-side > p {
-  margin: 6px 0 18px;
+  margin: 8px 0 20px;
   color: var(--ink-2);
   font-size: 14px;
 }
 .result-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
   margin: 0;
   border-top: 1px solid var(--line);
 }
 .result-stats div {
-  padding: 14px 0 0 16px;
-  border-left: 1px solid var(--line);
-}
-.result-stats div:first-child {
-  padding-left: 0;
-  border-left: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 9px 0 7px;
+  border-bottom: 1px solid var(--line-soft);
 }
 .result-stats dt {
-  color: var(--ink-3);
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.result-stats dt::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.result-stats .perfect dt::before {
+  color: var(--perfect);
+}
+.result-stats .good dt::before {
+  color: var(--good);
+}
+.result-stats .miss dt::before {
+  color: var(--miss);
 }
 .result-stats dd {
-  margin: 4px 0 0;
-  font-size: 34px;
-  font-weight: 800;
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 28px;
   line-height: 1.1;
   font-variant-numeric: tabular-nums;
 }
-.result-stats .perfect dd {
-  color: var(--cyan);
-  text-shadow: 0 0 18px rgba(98, 221, 255, 0.5);
-}
-.result-stats .miss dd {
-  color: var(--magenta);
-  text-shadow: 0 0 18px rgba(255, 95, 176, 0.4);
-}
-.result-glint {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(
-    105deg,
-    transparent 40%,
-    rgba(255, 255, 255, 0.14) 50%,
-    transparent 60%
-  );
-  transform: translateX(-100%);
-  animation: glint 1.4s 1.5s var(--ease) both;
-}
-@keyframes glint {
-  to {
-    transform: translateX(100%);
-  }
-}
 
-/* ---------- 基礎練習のバッジ ---------- */
+/* ---------- 基礎練習のバッジ（ヘッダーの中に置く） ---------- */
 .drill-badge {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 6px 5px 16px;
-  transform: translateX(-50%);
-  border: 1px solid rgba(255, 95, 176, 0.5);
-  border-radius: 999px;
-  background: rgba(40, 8, 30, 0.55);
-  backdrop-filter: var(--blur);
-  box-shadow: 0 0 26px rgba(255, 95, 176, 0.2);
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--brass-line);
+  border-radius: var(--r-s);
+  background: rgba(11, 10, 9, 0.72);
+  font-size: 12px;
   white-space: nowrap;
   animation: badge-in 0.6s var(--ease) both;
 }
 .drill-badge b {
-  color: var(--magenta-hi);
-  font-size: 13px;
-  letter-spacing: 0.18em;
+  padding: 5px 11px;
+  color: var(--brass-hi);
+  font-weight: 600;
+  letter-spacing: 0.12em;
 }
 .drill-badge span {
-  padding: 4px 13px;
-  border-radius: 999px;
-  background: var(--magenta);
-  color: #2a0818;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  padding: 5px 12px;
+  border-left: 1px solid var(--brass-line);
+  color: var(--ink);
+  letter-spacing: 0.06em;
 }
 @keyframes badge-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -10px) scale(0.92);
+    transform: translateY(-6px);
   }
 }
 
-/* ---------- コンボ ---------- */
+/* ---------- コンボ（画面右の中ほど。上部中央は楽譜のパネルのために空ける） ---------- */
 .combo {
   position: absolute;
-  top: 70px;
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
+  top: 40%;
+  right: var(--gutter);
+  text-align: right;
   pointer-events: none;
 }
 .combo b {
   display: block;
-  color: #fff;
-  font-size: 52px;
-  font-weight: 900;
-  font-style: italic;
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 64px;
+  font-weight: 500;
   line-height: 1;
-  text-shadow:
-    0 0 22px rgba(98, 221, 255, 0.9),
-    0 3px 2px rgba(0, 0, 20, 0.8);
-  animation: combo-pop 0.32s var(--ease) both;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.7);
+  animation: combo-pop 0.28s var(--ease) both;
 }
 .combo small {
   display: block;
-  margin-top: 4px;
-  color: var(--cyan);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.34em;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--brass-line);
+  color: var(--brass);
+  font-size: 12px;
+  letter-spacing: 0.2em;
 }
 @keyframes combo-pop {
   0% {
-    transform: scale(1.35);
+    transform: scale(1.18);
   }
   100% {
     transform: scale(1);
@@ -551,8 +643,8 @@
   pointer-events: none;
   background: radial-gradient(
     ellipse at 50% 100%,
-    rgba(255, 23, 59, 0.55),
-    rgba(255, 23, 59, 0.2) 60%,
+    rgba(255, 23, 59, 0.45),
+    rgba(255, 23, 59, 0.16) 60%,
     transparent
   );
   animation: miss 0.32s ease-out forwards;
@@ -567,6 +659,34 @@
   }
 }
 
+@media (max-height: 760px) {
+  /* 楽譜のパネルの下に収める */
+  .countin {
+    top: 56%;
+  }
+  .countin-digit {
+    font-size: 150px;
+  }
+  .countin-stage {
+    width: 210px;
+    height: 210px;
+  }
+  .dialogue {
+    padding: 18px 0 28px;
+  }
+  .dialogue .subtitle {
+    font-size: 22px;
+  }
+  .hud.has-band .controls {
+    bottom: 176px;
+  }
+}
+@media (max-width: 1100px) {
+  .dialogue-inner {
+    width: calc(100vw - 440px);
+    min-width: 480px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -575,4 +695,52 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* 先生のダイアログ（帯）が出ているあいだは、右下の操作を帯の上に避ける */
+.hud.has-band .controls {
+  bottom: 198px;
+}
+.controls {
+  transition: bottom 0.4s var(--ease);
+}
+
+/* ---------- 楽譜モードの部品（ui/score.css）を、この世界観の色に揃える ----------
+   楽譜の中の音符の色（現在の音、判定の色）は機能の色なので、ここでは触らない。 */
+body .score-panel {
+  border: 1px solid var(--line);
+  border-top-color: var(--brass-line);
+  border-radius: var(--r-s);
+  background: rgba(11, 10, 9, 0.9);
+  box-shadow: var(--shadow-s);
+  backdrop-filter: none;
+}
+body .score-panel-heading {
+  border-bottom-color: var(--line-soft);
+  color: var(--ink-3);
+  letter-spacing: 0.08em;
+}
+body .score-panel-heading b {
+  color: var(--brass-hi);
+}
+body .score-loading {
+  color: var(--ink-2);
+}
+body .view-mode-toggle {
+  border-color: var(--line);
+  border-radius: var(--r-s);
+  background: rgba(11, 10, 9, 0.8);
+}
+body .view-mode-toggle button {
+  border-right-color: var(--line-soft);
+  color: var(--ink-3);
+}
+body .view-mode-toggle button:hover:not(.active) {
+  background: rgba(242, 237, 227, 0.05);
+  color: var(--ink);
+}
+body .view-mode-toggle button.active {
+  background: var(--brass-dim);
+  box-shadow: inset 0 -1px var(--brass);
+  color: var(--brass-hi);
 }

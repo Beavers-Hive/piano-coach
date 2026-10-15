@@ -18,6 +18,7 @@ import { connectSocket, send } from "./state/ws";
 import { Hud } from "./ui/Hud";
 import { Setup } from "./ui/Setup";
 import { Toasts } from "./ui/Toasts";
+import { ScorePanel } from "./ui/ScorePanel";
 
 const pcKeys: Record<string, number> = {
   a: 60,
@@ -226,6 +227,7 @@ export default function App() {
       {entered ? (
         <div className="app">
           <PianoScene />
+          <ScorePanel />
           <Hud songs={songs} onSong={chooseSong} />
         </div>
       ) : (
@@ -238,7 +240,7 @@ export default function App() {
 
 /**
  * ?mock=1&ui=… で、画面ごとの状態を再現する（見た目の撮影と確認用）。カンマで組み合わせられる。
- * dialogue / question / plan / result / countin / drill / playing / error
+ * dialogue / question / plan / result / countin / drill / playing / error / title
  */
 function playMockUi(
   ui: string | null,
@@ -296,6 +298,7 @@ function playMockUi(
         break;
       case "question":
         set({
+          timeline: null,
           lessonState: "hearing",
           waitingForStart: false,
           camera: "overview",
@@ -310,6 +313,17 @@ function playMockUi(
         break;
       case "plan":
         set({ plan });
+        break;
+      case "title":
+        // 曲の導入（タイトルカードと、幕が上がる照明）の確認用
+        set({
+          timeline: null,
+          waitingForStart: false,
+          lessonState: "hearing",
+          camera: "overview",
+          subtitle: "",
+        });
+        at(300, () => set({ score: mockScore() }));
         break;
       case "result":
         set({ waitingForStart: false });

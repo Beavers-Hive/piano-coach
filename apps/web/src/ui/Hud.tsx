@@ -17,6 +17,9 @@ import {
 import { DRILL_LABEL, STATE_LABEL, STATE_TONE, idleStatus } from "./labels";
 import { ResultCard } from "./ResultCard";
 import { Roadmap } from "./Roadmap";
+import { SongIntro } from "./SongIntro";
+import { useSongIntro } from "./introState";
+import { ViewModeToggle } from "./ViewModeToggle";
 
 const CAMERAS: { id: CameraPreset; label: string; icon: ReactElement }[] = [
   { id: "overview", label: "全体", icon: <IconOverview /> },
@@ -58,10 +61,13 @@ export function Hud({
       ? null
       : idleStatus(s.lessonState, s.waitingForStart);
   const drill = s.timeline?.spec.drill;
+  // 曲の導入（タイトルカード）のあいだは、中央と下部を空けて、幕が上がるのを見せる
+  const intro = useSongIntro((state) => state.phase !== "off");
+  const belowScore = s.viewMode !== "notes" && s.timeline !== null;
 
   return (
     <div
-      className="hud"
+      className={`hud${teacherSpeaking && !intro ? " has-band" : ""}`}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
@@ -72,7 +78,7 @@ export function Hud({
         <div className="brand">
           <LogoMark />
           <span>
-            PIANO <em>COACH</em>
+            Piano <em>Coach</em>
           </span>
         </div>
         <span
@@ -122,16 +128,17 @@ export function Hud({
           onChange={(e) => void upload(e.target.files?.[0])}
         />
       </header>
-      {s.plan && <Roadmap plan={s.plan} />}
+      {s.plan && !intro && <Roadmap plan={s.plan} belowScore={belowScore} />}
       {s.combo > 1 && (
         <div className="combo">
           <b key={s.combo}>{s.combo}</b>
-          <small>PERFECT COMBO</small>
+          <small>連続 Perfect</small>
         </div>
       )}
       <CountIn />
       <ResultCard />
-      {s.question && (
+      <SongIntro />
+      {s.question && !intro && (
         <Question
           key={s.question.questionId}
           question={s.question}
@@ -144,20 +151,23 @@ export function Hud({
           }}
         />
       )}
-      <div className="bottom-stack">
-        {s.waitingForStart && s.handsMode !== "demo" && (
-          <button className="start" onClick={startPractice}>
-            <IconKeys />
-            鍵盤を押してスタート
-          </button>
-        )}
-        {teacherSpeaking ? (
-          <Dialogue text={s.subtitle} />
-        ) : (
-          status && <StatusChip text={status} />
-        )}
-      </div>
+      {!intro && (
+        <div className="bottom-stack">
+          {s.waitingForStart && s.handsMode !== "demo" && (
+            <button className="start" onClick={startPractice}>
+              <IconKeys />
+              鍵盤を押してスタート
+            </button>
+          )}
+          {teacherSpeaking ? (
+            <Dialogue text={s.subtitle} />
+          ) : (
+            status && <StatusChip text={status} />
+          )}
+        </div>
+      )}
       <div className="controls">
+        <ViewModeToggle />
         <button
           className="demo"
           disabled={!canPlayDemo}
@@ -188,6 +198,9 @@ export function Hud({
   );
 }
 
+/** 演目の番号。明朝の漢数字で、プログラムのように並べる。 */
+const NUMERALS = ["一", "二", "三", "四", "五", "六", "七", "八"];
+
 function Question({
   question,
   onAnswer,
@@ -206,7 +219,7 @@ function Question({
             className="q-option"
             onClick={() => onAnswer(option)}
           >
-            <span className="q-index">{index + 1}</span>
+            <span className="q-index">{NUMERALS[index] ?? index + 1}</span>
             <span className="q-label">{option}</span>
             <span className="q-arrow" aria-hidden="true">
               →

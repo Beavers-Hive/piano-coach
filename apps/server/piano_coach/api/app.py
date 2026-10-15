@@ -9,10 +9,12 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from piano_coach.brain.claude import ClaudeBrain
 from piano_coach.brain.scripted import ScriptedBrain
+from piano_coach.exercise.notation import MUSICXML_MEDIA_TYPE, timeline_to_musicxml
+from piano_coach.exercise.registry import ExerciseTimelineCache
 from piano_coach.lesson.fakes import FakeVoiceService
 from piano_coach.lesson.orchestrator import LessonOrchestrator
 from piano_coach.paths import DATA_DIR, ensure_data_dirs
@@ -28,6 +30,7 @@ def _fake_enabled(name: str) -> bool:
 
 def create_app(repository: ScoreRepository | None = None) -> FastAPI:
     repo = repository or ScoreRepository()
+    exercises = ExerciseTimelineCache(capacity=20)
     voice = FakeVoiceService() if _fake_enabled("PIANO_COACH_FAKE_TTS") else __import__("piano_coach.voice", fromlist=["VoiceService"]).VoiceService()
 
     @asynccontextmanager
@@ -71,6 +74,21 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
         if not path.is_file(): raise HTTPException(status_code=404, detail="voice clip not found")
         return FileResponse(path, media_type="audio/wav")
 
+    @app.get("/api/exercises/{exercise_id}/score.musicxml")
+    async def exercise_score(exercise_id: str) -> Response:
+        stored = exercises.get(exercise_id)
+        if stored is None:
+            raise HTTPException(status_code=404, detail="exercise not found")
+        return Response(
+            content=timeline_to_musicxml(
+                stored.timeline,
+                key_fifths=stored.key_fifths,
+                time_signature_num=stored.time_signature_num,
+                time_signature_den=stored.time_signature_den,
+            ),
+            media_type=MUSICXML_MEDIA_TYPE,
+        )
+
     @app.post("/api/voice/test")
     async def voice_test() -> dict:
         """準備画面の「先生の声をテスト」用。必ず VoiceService（Irodori）を通し、どのエンジンで鳴ったかを返す。"""
@@ -99,7 +117,7 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
         brain = None
         async def send(kind: str, payload: dict) -> None:
             async with send_lock: await websocket.send_json({"type": kind, "payload": payload})
-        lesson = LessonOrchestrator(send, voice=voice)
+        lesson = LessonOrchestrator(send, voice=voice, exercise_cache=exercises)
 
         async def handle(kind: str, payload: dict) -> None:
             nonlocal brain

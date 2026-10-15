@@ -13,6 +13,7 @@ dependencies = [
   "pillow",
   "httpx",
   "python-multipart",
+  "music21>=10.5.0",
 ]
 
 [project.scripts]

@@ -4,7 +4,7 @@ import { Mesh, ShaderMaterial } from "three";
 import { useAppStore } from "../state/store";
 
 const vertexShader = `varying vec3 vNormal; varying vec3 vPos; void main(){ vNormal=normalize(normalMatrix*normal); vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`;
-const fragmentShader = `uniform float uTime; uniform float uLevel; varying vec3 vNormal; varying vec3 vPos; void main(){ float fres=pow(1.0-abs(dot(normalize(vNormal),vec3(0.,0.,1.))),2.4); float noise=sin(vPos.x*18.+uTime*3.)*sin(vPos.y*14.-uTime*2.)*.12; vec3 core=mix(vec3(.07,.22,.65),vec3(.35,.96,1.),fres+noise+uLevel*.3); gl_FragColor=vec4(core, .78+fres*.22); }`;
+const fragmentShader = `uniform float uTime; uniform float uLevel; varying vec3 vNormal; varying vec3 vPos; void main(){ float fres=pow(1.0-abs(dot(normalize(vNormal),vec3(0.,0.,1.))),2.4); float noise=sin(vPos.x*18.+uTime*3.)*sin(vPos.y*14.-uTime*2.)*.12; vec3 core=mix(vec3(.34,.21,.06),vec3(1.,.8,.4),fres+noise+uLevel*.3); gl_FragColor=vec4(core, .78+fres*.22); }`;
 
 export function TeacherOrb() {
   const mesh = useRef<Mesh>(null);

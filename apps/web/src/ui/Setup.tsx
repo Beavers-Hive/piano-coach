@@ -54,16 +54,19 @@ function Step({
   title,
   detail,
   status,
+  done = false,
   children,
 }: {
   index: number;
   title: string;
   detail: string;
   status: React.ReactNode;
+  /** 済んだ項目は、番号の印が真鍮色になる */
+  done?: boolean;
   children?: React.ReactNode;
 }) {
   return (
-    <li className="step">
+    <li className={`step${done ? " done" : ""}`}>
       <span className="step-index">{index}</span>
       <div className="step-body">
         <div className="step-head">
@@ -113,7 +116,7 @@ export function Setup({ onBegin }: { onBegin: () => void }) {
       <div className="setup-sheet">
         <div className="setup-header">
           <div className="setup-brand">
-            <LogoMark size={28} />
+            <LogoMark size={26} />
             <span>Piano Coach</span>
           </div>
           <h1>レッスンの準備</h1>
@@ -124,6 +127,7 @@ export function Setup({ onBegin }: { onBegin: () => void }) {
           <Step
             index={1}
             title="音を鳴らす"
+            done={state.samplerReady}
             detail="ピアノ音源（Salamander Grand Piano）を読み込みます。ブラウザの制約で、最初に一度だけ操作が必要です。"
             status={
               <Chip tone={state.samplerReady ? "ok" : busy ? "busy" : "idle"}>
@@ -147,6 +151,7 @@ export function Setup({ onBegin }: { onBegin: () => void }) {
           <Step
             index={2}
             title="MIDI キーボード"
+            done={Boolean(state.selectedPort)}
             detail="演奏に使う鍵盤を選びます。つながっていなくても、PC のキーボード（A〜K、W/E/T/Y/U）で弾けます。"
             status={
               <Chip tone={midiTone}>
@@ -185,6 +190,7 @@ export function Setup({ onBegin }: { onBegin: () => void }) {
           <Step
             index={3}
             title="先生の声"
+            done={voiceResult?.engine === "irodori"}
             detail="Irodori（先生の声）で短い文を読み上げます。代わりのブラウザの声になった場合は、声のサーバーを確認してください。"
             status={
               <Chip
@@ -229,6 +235,7 @@ export function Setup({ onBegin }: { onBegin: () => void }) {
           <Step
             index={4}
             title="先生（Claude）"
+            done={Boolean(health?.claude)}
             detail="ヒアリング、指導計画、講評を担当します。サブスクでログインした Claude Code を使います。"
             status={
               <Chip tone={claudeTone}>

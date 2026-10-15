@@ -1,0 +1,184 @@
+.score-panel {
+  position: fixed;
+  z-index: 11;
+  top: 4.8rem;
+  left: 50%;
+  width: min(90vw, 1180px);
+  height: 14rem;
+  transform: translateX(-50%);
+  overflow: hidden;
+  border: 1px solid rgba(144, 222, 255, 0.24);
+  border-radius: 14px;
+  background: linear-gradient(
+    110deg,
+    rgba(3, 11, 25, 0.9),
+    rgba(8, 19, 39, 0.76)
+  );
+  box-shadow:
+    0 16px 45px rgba(0, 0, 0, 0.34),
+    inset 0 1px rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(15px);
+  pointer-events: none;
+}
+
+.score-panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 1.8rem;
+  padding: 0 1rem;
+  color: #8cb9d9;
+  border-bottom: 1px solid rgba(150, 219, 255, 0.12);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.score-panel-heading b {
+  color: #c9f6ff;
+  font-size: 0.66rem;
+}
+
+.score-scroll {
+  position: relative;
+  height: calc(100% - 1.8rem);
+  overflow: hidden;
+}
+
+.score-svg {
+  width: max-content;
+  min-width: 100%;
+  height: 100%;
+  padding: 0.22rem 1.5rem 0.45rem;
+}
+
+.score-svg svg {
+  display: block;
+  height: 100%;
+  width: auto;
+  overflow: visible;
+}
+
+.score-svg .staff,
+.score-svg .barLine,
+.score-svg .stem,
+.score-svg .beam,
+.score-svg .ledgerLines,
+.score-svg .clef,
+.score-svg .keySig,
+.score-svg .meterSig,
+.score-svg .note,
+.score-svg .rest,
+.score-svg .harm,
+.score-svg .tempo {
+  color: #f2ede3 !important;
+  fill: #f2ede3 !important;
+  stroke: #f2ede3 !important;
+}
+
+/* 運指の数字（<fingering>）は、真鍮色で音符と見分けやすくする */
+.score-svg .fing,
+.score-svg .fing text {
+  color: #d9b878 !important;
+  fill: #d9b878 !important;
+  stroke: none !important;
+}
+
+.score-svg .note,
+.score-svg .rest {
+  transition:
+    color 120ms ease,
+    fill 120ms ease,
+    filter 120ms ease;
+}
+
+.score-svg .note.is-current {
+  color: #57efff !important;
+  fill: #57efff !important;
+  stroke: #57efff !important;
+  filter: drop-shadow(0 0 4px rgba(87, 239, 255, 0.95));
+}
+
+.score-svg .note.score-result-perfect {
+  color: #70f2a9 !important;
+  fill: #70f2a9 !important;
+  stroke: #70f2a9 !important;
+}
+
+.score-svg .note.score-result-good {
+  color: #69ddff !important;
+  fill: #69ddff !important;
+  stroke: #69ddff !important;
+}
+
+.score-svg .note.score-result-miss {
+  color: #ff6377 !important;
+  fill: #ff6377 !important;
+  stroke: #ff6377 !important;
+}
+
+.score-cursor {
+  position: absolute;
+  top: 0.2rem;
+  bottom: 0.3rem;
+  width: 2px;
+  border-radius: 99px;
+  background: #65f2ff;
+  box-shadow: 0 0 10px 2px rgba(101, 242, 255, 0.72);
+  transition: transform 80ms linear;
+}
+
+.score-loading {
+  display: grid;
+  height: 100%;
+  place-items: center;
+  color: #c6e9ff;
+  font-size: 0.84rem;
+  letter-spacing: 0.06em;
+}
+
+.view-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(151, 219, 255, 0.2);
+  border-radius: 9px;
+  background: rgba(4, 12, 27, 0.68);
+}
+
+.view-mode-toggle button {
+  min-width: 3.4rem;
+  padding: 0.38rem 0.42rem;
+  border: 0;
+  border-right: 1px solid rgba(151, 219, 255, 0.14);
+  border-radius: 0;
+  background: transparent;
+  color: #8da9c0;
+  font-size: 0.67rem;
+}
+
+.view-mode-toggle button:last-child {
+  border-right: 0;
+}
+
+.view-mode-toggle button.active {
+  background: rgba(71, 211, 255, 0.2);
+  color: #e9fbff;
+  box-shadow: inset 0 -1px #65eaff;
+}
+
+@media (max-width: 760px) {
+  .score-panel {
+    top: 4.1rem;
+    width: 94vw;
+    height: 8.8rem;
+  }
+
+  .score-panel-heading {
+    height: 1.5rem;
+  }
+
+  .score-scroll {
+    height: calc(100% - 1.5rem);
+  }
+}

@@ -74,7 +74,6 @@ function Card({
   const perfect = useCountUp(summary.perfect, 500);
   const good = useCountUp(summary.good, 650);
   const miss = useCountUp(summary.miss, 800);
-  const circumference = 2 * Math.PI * 54;
   const top = accuracy >= 95;
   return (
     <div
@@ -82,31 +81,20 @@ function Card({
       role="status"
       onClick={onClose}
     >
-      <p className="eyebrow">RESULT</p>
+      <div className="result-head">
+        <p className="eyebrow">本日の演奏</p>
+        <small>{summary.total} 音</small>
+      </div>
       <div className="result-main">
-        <div className="result-ring">
-          <svg viewBox="0 0 120 120" aria-hidden="true">
-            <defs>
-              <linearGradient id="ring-g" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stopColor="#7fe8ff" />
-                <stop offset="1" stopColor={top ? "#ff7cc0" : "#4a8dff"} />
-              </linearGradient>
-            </defs>
-            <circle className="track" cx="60" cy="60" r="54" />
-            <circle
-              className="bar"
-              cx="60"
-              cy="60"
-              r="54"
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference * (1 - shown / 100)}
-            />
-          </svg>
+        <div className="result-score">
+          <small>正確さ</small>
           <div className="result-pct">
             <b>{shown}</b>
             <span>%</span>
           </div>
-          <small>正確さ</small>
+          <div className="result-meter" aria-hidden="true">
+            <i style={{ width: `${shown}%` }} />
+          </div>
         </div>
         <div className="result-side">
           <h2 className="result-grade">{grade.title}</h2>
@@ -127,7 +115,6 @@ function Card({
           </dl>
         </div>
       </div>
-      {top && <span className="result-glint" aria-hidden="true" />}
     </div>
   );
 }

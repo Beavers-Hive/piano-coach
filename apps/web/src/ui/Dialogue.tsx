@@ -73,17 +73,19 @@ export function Dialogue({ text }: { text: string }) {
   const { count, done } = useTypewriter(text);
   return (
     <div className="dialogue" role="log" aria-live="polite">
-      <div className="dialogue-name">
-        <i />
-        先生
+      <div className="dialogue-inner">
+        <div className="dialogue-name">先生</div>
+        <p className="subtitle">
+          <span>{text.slice(0, count)}</span>
+          <span className="untyped">{text.slice(count)}</span>
+        </p>
+        <span
+          className={`dialogue-next${done ? " on" : ""}`}
+          aria-hidden="true"
+        >
+          ▼
+        </span>
       </div>
-      <p className="subtitle">
-        <span>{text.slice(0, count)}</span>
-        <span className="untyped">{text.slice(count)}</span>
-      </p>
-      <span className={`dialogue-next${done ? " on" : ""}`} aria-hidden="true">
-        ▼
-      </span>
     </div>
   );
 }

@@ -149,6 +149,9 @@ export function handleIncomingMessage({ type, payload }: WireMessage): void {
         combo: 0,
         camera: "play",
       });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("piano-score-ready"));
+      }
       break;
     case "demo.play":
       window.dispatchEvent(new CustomEvent("piano-demo", { detail: payload }));

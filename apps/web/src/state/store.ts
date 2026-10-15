@@ -10,6 +10,7 @@ import type {
 } from "../types";
 
 export type HitKind = "perfect" | "good" | "miss" | "extra";
+export type ViewMode = "notes" | "score" | "both";
 type AppState = {
   ready: boolean;
   samplerReady: boolean;
@@ -28,6 +29,7 @@ type AppState = {
     ratio: number;
   };
   timeline: ExerciseTimeline | null;
+  viewMode: ViewMode;
   plan?: Plan;
   subtitle: string;
   question?: {
@@ -66,6 +68,7 @@ export const useAppStore = create<AppState>((set) => ({
   lessonState: "idle",
   pageImageUrls: [],
   timeline: null,
+  viewMode: "both",
   subtitle: "",
   fingers: {},
   pressed: new Set(),

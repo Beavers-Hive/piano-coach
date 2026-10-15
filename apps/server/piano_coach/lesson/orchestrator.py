@@ -12,6 +12,7 @@ from typing import Any
 
 from piano_coach.brain.base import ActionReady, BrainError, SayDelta, TutorBrain, format_message
 from piano_coach.exercise.builder import DrillSpec, ExerciseBuilder, ExerciseSpec
+from piano_coach.exercise.registry import ExerciseTimelineCache
 from piano_coach.lesson.actions import AgentAction, validate_action
 from piano_coach.lesson.verdict import RealtimeSummary, suggested_verdict
 from piano_coach.paths import DATA_DIR
@@ -28,13 +29,15 @@ FINGERING_CHUNK_TIMEOUT_S = float(os.environ.get("PIANO_COACH_FINGERING_TIMEOUT"
 
 
 class LessonOrchestrator:
-    def __init__(self, send: Send, brain: TutorBrain | None = None, voice: Any | None = None) -> None:
+    def __init__(self, send: Send, brain: TutorBrain | None = None, voice: Any | None = None,
+                 exercise_cache: ExerciseTimelineCache | None = None) -> None:
         self.send, self.brain, self.voice = send, brain, voice
         self._brain_factory = type(brain) if brain is not None else None
         self.state, self.score, self.plan, self.timeline = "idle", None, None, None
         self.exercise_version, self.awaiting_voice, self._step_index = 0, None, 0
         self._brain_lock, self._send_lock = asyncio.Lock(), asyncio.Lock()
         self._builder, self._queued_user_messages = ExerciseBuilder(), []
+        self._exercise_cache = exercise_cache
         self._attempt_counts: dict[tuple, int] = defaultdict(int)
         self._poor_retry_streak = 0
         self._poor_retry_key: tuple | None = None
@@ -263,6 +266,8 @@ class LessonOrchestrator:
             await self.emit("error", {"message": "課題を作れませんでした。前の課題を続けます。"})
             return False
         self.exercise_version, self.timeline = next_version, timeline
+        if self._exercise_cache:
+            self._exercise_cache.put(timeline, self.score)
         await self.transition("briefing"); await self.emit("exercise.ready", {"timeline": self.timeline.model_dump(mode="json")})
         await self._speak_fixed(self.exercise_instruction(spec), gate=True)
         return True

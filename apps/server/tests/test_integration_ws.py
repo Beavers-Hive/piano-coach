@@ -64,6 +64,25 @@ def test_fake_server_starts(monkeypatch):
         assert client.get("/api/health").json()["tts"] is True
 
 
+def test_exercise_score_api_after_exercise_ready(monkeypatch):
+    monkeypatch.setenv("PIANO_COACH_FAKE_BRAIN", "1")
+    monkeypatch.setenv("PIANO_COACH_FAKE_TTS", "1")
+    with TestClient(create_app()) as client, client.websocket_connect("/ws") as ws:
+        song_id = client.get("/api/songs").json()["songs"][1]["songId"]
+        ws.send_json({"type": "lesson.start", "payload": {"songId": song_id}})
+        receive_until(ws, "agent.ask")
+        ws.send_json({"type": "hearing.answer", "payload": {"questionId": "experience", "answer": "はじめて"}})
+        receive_until(ws, "agent.ask")
+        ws.send_json({"type": "hearing.answer", "payload": {"questionId": "range", "answer": "最初から"}})
+        ready, _ = receive_until(ws, "exercise.ready")
+        exercise_id = ready["payload"]["timeline"]["exerciseId"]
+        response = client.get(f"/api/exercises/{exercise_id}/score.musicxml")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/vnd.recordare.musicxml+xml")
+        assert b"<score-partwise" in response.content
+        assert client.get("/api/exercises/missing/score.musicxml").status_code == 404
+
+
 def test_scripted_brain_switches_to_drill_after_two_poor_attempts(monkeypatch):
     monkeypatch.setenv("PIANO_COACH_FAKE_BRAIN", "1")
     monkeypatch.setenv("PIANO_COACH_FAKE_TTS", "1")
