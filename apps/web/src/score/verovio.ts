@@ -27,6 +27,11 @@ async function getToolkit(): Promise<Toolkit> {
 }
 
 /** MusicXML を横長の 1 段 SVG と、その時間対応表に描画する。 */
+/** 楽譜の描画エンジンを先に読み込んでおく（課題が届いたときに「準備中」を見せないため）。 */
+export function preloadVerovio(): void {
+  void getToolkit().catch(() => undefined);
+}
+
 export async function renderMusicXml(source: string): Promise<RenderedScore> {
   const toolkit = await getToolkit();
   toolkit.setOptions({

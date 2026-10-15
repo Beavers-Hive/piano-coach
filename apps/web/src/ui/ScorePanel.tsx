@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { getPlayheadMs } from "../midi/clock";
 import { useAppStore } from "../state/store";
-import { renderMusicXml } from "../score/verovio";
+import { preloadVerovio, renderMusicXml } from "../score/verovio";
+
+// アプリの読み込み時に、楽譜の描画エンジンを先に用意しておく
+preloadVerovio();
 import {
   scoreElementsAt,
   scoreElementsForHit,
