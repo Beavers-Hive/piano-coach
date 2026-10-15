@@ -11,7 +11,7 @@ import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response
 
-from piano_coach.brain.claude import ClaudeBrain
+from piano_coach.brain.codex import CodexBrain, check_subscription_environment
 from piano_coach.brain.scripted import ScriptedBrain
 from piano_coach.exercise.notation import MUSICXML_MEDIA_TYPE, timeline_to_musicxml
 from piano_coach.exercise.registry import ExerciseTimelineCache
@@ -35,8 +35,7 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        if os.environ.get("ANTHROPIC_API_KEY"):
-            raise RuntimeError("ANTHROPIC_API_KEY must be unset; Claude subscription login is required")
+        check_subscription_environment()
         ensure_data_dirs()
         warmup = asyncio.create_task(voice.warmup_phrases())
         try:
@@ -126,7 +125,7 @@ def create_app(repository: ScoreRepository | None = None) -> FastAPI:
                     score = repo.get(payload.get("songId", ""))
                     if not score: await send("error", {"message": "曲が見つかりません"}); return
                     if brain: await brain.close()
-                    brain = ScriptedBrain() if _fake_enabled("PIANO_COACH_FAKE_BRAIN") else ClaudeBrain()
+                    brain = ScriptedBrain() if _fake_enabled("PIANO_COACH_FAKE_BRAIN") else CodexBrain()
                     try:
                         await brain.open()
                         lesson.set_brain(brain)

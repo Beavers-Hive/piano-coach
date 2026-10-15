@@ -2,20 +2,19 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from pathlib import Path
 
-from piano_coach.brain import ActionReady, BrainError, ClaudeBrain, SayDelta
+from piano_coach.brain import ActionReady, BrainError, CodexBrain, SayDelta
+from piano_coach.brain.codex import check_subscription_environment
 from piano_coach.brain.base import format_message
 from piano_coach.score.fingering import compact_fingering_input
 from piano_coach.score.importer import import_score
 
 
 async def main() -> None:
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        raise SystemExit("Unset ANTHROPIC_API_KEY; this smoke uses Claude subscription login.")
+    check_subscription_environment()
     score = import_score(Path(__file__).resolve().parents[3] / "assets/scores/minuet-g")
-    brain = ClaudeBrain()
+    brain = CodexBrain()
     try:
         await brain.open()
         action = None
@@ -25,7 +24,7 @@ async def main() -> None:
             elif isinstance(event, BrainError): raise RuntimeError(event.reason)
         if not action or action.get("type") != "ask": raise RuntimeError(f"SONG_LOADED did not yield ask: {action}")
         notes = [note for note in score.notes if note.measure <= 8]
-        result = await ClaudeBrain.design_fingering(compact_fingering_input(notes, score.keyFifths, score.bpm))
+        result = await CodexBrain.design_fingering(compact_fingering_input(notes, score.keyFifths, score.bpm))
         if len(result.get("fingering", [])) < len(notes): raise RuntimeError("fingering omitted notes")
         print(f"\nsmoke OK: ask + {len(result['fingering'])} fingerings")
     finally:

@@ -1,6 +1,6 @@
 """デモ曲の曲解析と運指を、事前に作ってキャッシュしておく（DESIGN.md F-50）。
 
-本物の Claude（サブスク）を使う。キャッシュ済みの曲は飛ばす。作り直すときは data/songs/<songId>/ の
+本物の Codex（ChatGPT サブスク）を使う。キャッシュ済みの曲は飛ばす。作り直すときは data/songs/<songId>/ の
 analysis.json と fingering.json を消してから実行する。
 
     cd apps/server && uv run python scripts/precompute_song_cache.py
@@ -11,10 +11,9 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import time
 
-from piano_coach.brain.claude import ClaudeBrain
+from piano_coach.brain.codex import CodexBrain, check_subscription_environment
 from piano_coach.lesson.orchestrator import LessonOrchestrator
 from piano_coach.score.importer import ScoreRepository, rasterize_pages
 
@@ -24,8 +23,7 @@ async def main() -> None:
     parser.add_argument("--force-fingering", action="store_true", help="運指をキャッシュがあっても作り直す")
     parser.add_argument("--song", default="", help="曲名の一部（指定した曲だけ処理する）")
     args = parser.parse_args()
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        raise SystemExit("ANTHROPIC_API_KEY を外して実行してください（サブスクのログインを使う）")
+    check_subscription_environment()
     repo = ScoreRepository()
 
     async def ignore(kind: str, payload: dict) -> None:  # 送り先のクライアントはいない
@@ -35,7 +33,7 @@ async def main() -> None:
         if args.song and args.song not in score.title:
             continue
         started = time.perf_counter()
-        lesson = LessonOrchestrator(ignore, brain=ClaudeBrain())
+        lesson = LessonOrchestrator(ignore, brain=CodexBrain())
         lesson.score = score
         song_dir = lesson._song_dir()
         pdf = repo.source_pdf(score.songId)
