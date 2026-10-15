@@ -2,6 +2,7 @@ import { useState } from "react";
 import { unlockPiano } from "../audio/piano";
 import { selectMidi } from "../midi/MidiInput";
 import { useAppStore } from "../state/store";
+import { LogoMark } from "./icons";
 type VoiceTestResult = { engine: "irodori" | "webspeech" };
 
 /** 準備画面の声のテスト。必ずサーバー経由で Irodori を通し、どちらの声で鳴ったかを返す。 */
@@ -49,41 +50,93 @@ export function Setup({ onBegin }: { onBegin: () => void }) {
   };
   return (
     <main className="setup">
+      <div className="setup-stage" aria-hidden="true">
+        <div className="setup-glow" />
+        {[8, 19, 27, 41, 58, 69, 83].map((left, index) => (
+          <i
+            key={left}
+            className="setup-note"
+            style={{
+              left: `${left}%`,
+              animationDelay: `${(index * 1.7) % 6}s`,
+              animationDuration: `${7 + (index % 3) * 1.6}s`,
+              height: `${60 + ((index * 37) % 90)}px`,
+            }}
+          />
+        ))}
+        <div className="setup-keys" />
+      </div>
       <div className="setup-card">
-        <p className="eyebrow">PIANO COACH / DEMO CHECK</p>
-        <h1>準備はできましたか？</h1>
-        <p>音源、MIDI、先生の声を一度ここで確かめます。</p>
-        <button
-          className="primary"
-          onClick={() => void begin()}
-          disabled={busy}
-        >
-          {busy ? "音源を読み込み中…" : "音声を有効にして準備する"}
-        </button>
-        <section className="checks">
-          <Check
-            ok={state.samplerReady}
-            label="Salamander Grand Piano"
-            value={state.samplerReady ? "準備完了" : "クリックして読み込み"}
-          />
-          <Check
-            ok={Boolean(state.health?.claude)}
-            label="Claude（先生の頭脳）"
-            value={
-              state.health
-                ? state.health.claude
+        <section className="setup-hero">
+          <div className="setup-logo">
+            <LogoMark size={34} />
+            <span>
+              PIANO <em>COACH</em>
+            </span>
+          </div>
+          <h1>
+            楽譜を渡すだけ。
+            <span>AI の先生が、あなた専属で教えてくれる</span>
+          </h1>
+          <p className="lead">
+            3D
+            の鍵盤とホログラムの手でお手本を見せ、あなたの演奏をその場で聴いて、声で講評します。
+          </p>
+          <ul className="setup-features">
+            <li>運指を設計</li>
+            <li>リアルタイム判定</li>
+            <li>声で講評</li>
+          </ul>
+        </section>
+        <section className="setup-panel">
+          <p className="eyebrow">出発前のチェック</p>
+          <button
+            className={`primary wide${state.samplerReady ? " done" : ""}`}
+            onClick={() => void begin()}
+            disabled={busy || state.samplerReady}
+          >
+            {busy ? "音源を読み込み中…" : "音声を有効にして準備する"}
+          </button>
+          <div className="checks">
+            <Check
+              ok={state.samplerReady}
+              label="Salamander Grand Piano"
+              value={state.samplerReady ? "準備完了" : "クリックして読み込み"}
+            />
+            <Check
+              ok={Boolean(state.health?.claude)}
+              label="Claude（先生の頭脳）"
+              value={
+                state.health
+                  ? state.health.claude
+                    ? "接続中"
+                    : "未接続"
+                  : "確認中"
+              }
+            />
+            <Check
+              ok={Boolean(state.health?.tts)}
+              label="Irodori（先生の声）"
+              value={
+                state.health
+                  ? state.health.tts
+                    ? "接続中"
+                    : "未接続"
+                  : "確認中"
+              }
+            />
+            <Check
+              ok={Boolean(state.selectedPort)}
+              label="MIDI キーボード"
+              value={
+                state.selectedPort
                   ? "接続中"
-                  : "未接続"
-                : "確認中"
-            }
-          />
-          <Check
-            ok={Boolean(state.health?.tts)}
-            label="Irodori（先生の声）"
-            value={
-              state.health ? (state.health.tts ? "接続中" : "未接続") : "確認中"
-            }
-          />
+                  : state.midiUnavailable
+                    ? "PC キーボードで代用"
+                    : "ポートを選択"
+              }
+            />
+          </div>
           {voiceResult && (
             <p
               role="status"
@@ -112,20 +165,27 @@ export function Setup({ onBegin }: { onBegin: () => void }) {
             </small>
           </label>
           {state.midiUnavailable && (
-            <p role="status">
+            <p role="status" className="note">
               MIDI は使えません。PC
               キーボード（A〜K、W/E/T/Y/U）で入力できます。
             </p>
           )}
+          <div className="setup-actions">
+            <button
+              className="ghost"
+              onClick={() => void testVoice(setVoiceResult)}
+            >
+              先生の声をテスト
+            </button>
+            <button
+              className="primary"
+              disabled={!state.ready}
+              onClick={onBegin}
+            >
+              レッスンへ進む →
+            </button>
+          </div>
         </section>
-        <div className="setup-actions">
-          <button onClick={() => void testVoice(setVoiceResult)}>
-            先生の声をテスト
-          </button>
-          <button className="primary" disabled={!state.ready} onClick={onBegin}>
-            レッスンへ進む →
-          </button>
-        </div>
       </div>
     </main>
   );
@@ -140,7 +200,7 @@ function Check({
   value: string;
 }) {
   return (
-    <div className="check">
+    <div className={`check${ok ? " ok" : ""}`}>
       <i className={ok ? "ok" : ""} /> <span>{label}</span>
       <b>{value}</b>
     </div>

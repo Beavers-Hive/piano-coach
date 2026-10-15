@@ -1,27 +1,28 @@
-import { useRef } from "react";
+import { useRef, type ReactElement } from "react";
 import { playDemo, startPractice } from "../midi/Player";
 import { useAppStore } from "../state/store";
 import { send } from "../state/ws";
-/** 先生が話していないときの字幕（状態に合わせる）。 */
-function idleSubtitle(state: string, waitingForStart: boolean): string {
-  if (waitingForStart) return "どれか鍵盤を押してスタート";
-  switch (state) {
-    case "idle":
-      return "曲を選ぶか、楽譜の PDF をドロップしてください";
-    case "importing":
-    case "analyzing":
-      return "先生が楽譜を読んでいます…";
-    case "hearing":
-    case "planning":
-      return "先生が練習の計画を考えています…";
-    case "reviewing":
-      return "先生が演奏を聴いて考えています…";
-    case "finished":
-      return "今日のレッスンはここまで。おつかれさま！";
-    default:
-      return "先生があなたの演奏を待っています";
-  }
-}
+import type { CameraPreset } from "../types";
+import { CountIn } from "./CountIn";
+import { Dialogue, StatusChip } from "./Dialogue";
+import {
+  IconCloseup,
+  IconDemo,
+  IconKeys,
+  IconOverview,
+  IconPlay,
+  IconUpload,
+  LogoMark,
+} from "./icons";
+import { DRILL_LABEL, STATE_LABEL, STATE_TONE, idleStatus } from "./labels";
+import { ResultCard } from "./ResultCard";
+import { Roadmap } from "./Roadmap";
+
+const CAMERAS: { id: CameraPreset; label: string; icon: ReactElement }[] = [
+  { id: "overview", label: "全体", icon: <IconOverview /> },
+  { id: "play", label: "演奏", icon: <IconPlay /> },
+  { id: "closeup", label: "寄り", icon: <IconCloseup /> },
+];
 
 export function Hud({
   songs,
@@ -34,14 +35,6 @@ export function Hud({
   const file = useRef<HTMLInputElement>(null);
   const canPlayDemo =
     s.lessonState === "demo" && s.timeline?.spec.mode === "watch";
-  const answer = (text: string) => {
-    if (s.question)
-      send("hearing.answer", {
-        questionId: s.question.questionId,
-        answer: text,
-      });
-    s.set({ question: undefined });
-  };
   const upload = async (f?: File) => {
     if (!f) return;
     const body = new FormData();
@@ -52,6 +45,20 @@ export function Hud({
       onSong(songId);
     } else s.set({ error: "この PDF はデモ用 MIDI と一致しません" });
   };
+
+  // 先生の字幕。演奏中の短い案内は、3D を隠さない小さな状態表示にする
+  const counting = s.countInBeat !== null;
+  const playing = s.lessonState === "practicing";
+  const teacherSpeaking = Boolean(s.subtitle) && !playing && !counting;
+  const status = s.subtitle
+    ? playing
+      ? s.subtitle
+      : null
+    : counting || s.question
+      ? null
+      : idleStatus(s.lessonState, s.waitingForStart);
+  const drill = s.timeline?.spec.drill;
+
   return (
     <div
       className="hud"
@@ -63,24 +70,48 @@ export function Hud({
     >
       <header>
         <div className="brand">
-          PIANO <em>COACH</em>
+          <LogoMark />
+          <span>
+            PIANO <em>COACH</em>
+          </span>
         </div>
-        <span className="state">● {s.lessonState}</span>
-        <select
-          aria-label="曲を選択"
-          onChange={(e) => onSong(e.target.value)}
-          defaultValue=""
+        <span
+          className={`state ${STATE_TONE[s.lessonState]}`}
+          data-state={s.lessonState}
         >
-          <option value="" disabled>
-            曲を選択
-          </option>
-          {songs.map((song) => (
-            <option key={song.songId} value={song.songId}>
-              {song.title} — {song.composer}
+          <i />
+          {STATE_LABEL[s.lessonState]}
+          {/* 内部の状態名（E2E と開発時の確認用。画面には出さない） */}
+          <span hidden>{s.lessonState}</span>
+        </span>
+        {drill && (
+          <div className="drill-badge" role="status" key={drill.kind}>
+            <b>基礎練習</b>
+            <span>{DRILL_LABEL[drill.kind]}</span>
+          </div>
+        )}
+        <label className="song-select">
+          <select
+            aria-label="曲を選択"
+            onChange={(e) => onSong(e.target.value)}
+            defaultValue=""
+          >
+            <option value="" disabled>
+              曲を選択
             </option>
-          ))}
-        </select>
-        <button onClick={() => file.current?.click()}>
+            {songs.map((song) => (
+              <option key={song.songId} value={song.songId}>
+                {song.title} — {song.composer}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="ghost"
+          onClick={() => file.current?.click()}
+          title="楽譜の PDF をドロップ、または選択"
+        >
+          <IconUpload />
           PDF をドロップ / 選択
         </button>
         <input
@@ -91,68 +122,111 @@ export function Hud({
           onChange={(e) => void upload(e.target.files?.[0])}
         />
       </header>
-      {s.plan && (
-        <aside className="plan">
-          <b>{s.plan.goal}</b>
-          {s.plan.steps.map((step) => (
-            <div className={step.status} key={step.id}>
-              <i />
-              {step.title}
-            </div>
-          ))}
-        </aside>
-      )}
-      {s.fallbackVoiceAt && (
-        <div className="voice-fallback" role="status">
-          代替音声（ブラウザ）で再生しています — Irodori を確認してください
-        </div>
-      )}
-      <div className="subtitle">
-        {s.subtitle || idleSubtitle(s.lessonState, s.waitingForStart)}
-      </div>
+      {s.plan && <Roadmap plan={s.plan} />}
       {s.combo > 1 && (
         <div className="combo">
-          {s.combo}
+          <b key={s.combo}>{s.combo}</b>
           <small>PERFECT COMBO</small>
         </div>
       )}
-      {s.waitingForStart && s.handsMode !== "demo" && (
-        <button className="start" onClick={startPractice}>
-          鍵盤を押してスタート
-        </button>
+      <CountIn />
+      <ResultCard />
+      {s.question && (
+        <Question
+          key={s.question.questionId}
+          question={s.question}
+          onAnswer={(text) => {
+            send("hearing.answer", {
+              questionId: s.question?.questionId,
+              answer: text,
+            });
+            s.set({ question: undefined });
+          }}
+        />
       )}
+      <div className="bottom-stack">
+        {s.waitingForStart && s.handsMode !== "demo" && (
+          <button className="start" onClick={startPractice}>
+            <IconKeys />
+            鍵盤を押してスタート
+          </button>
+        )}
+        {teacherSpeaking ? (
+          <Dialogue text={s.subtitle} />
+        ) : (
+          status && <StatusChip text={status} />
+        )}
+      </div>
       <div className="controls">
-        <button disabled={!canPlayDemo} onClick={playDemo}>
+        <button
+          className="demo"
+          disabled={!canPlayDemo}
+          onClick={playDemo}
+          aria-label="お手本を再生"
+        >
+          <IconDemo />
           お手本を再生
         </button>
-        <button onClick={() => s.set({ camera: "overview" })}>全体</button>
-        <button onClick={() => s.set({ camera: "play" })}>演奏</button>
-        <button onClick={() => s.set({ camera: "closeup" })}>寄り</button>
-      </div>
-      {s.question && (
-        <div className="question">
-          <p>{s.question.text}</p>
-          {s.question.options.map((o) => (
-            <button key={o} onClick={() => answer(o)}>
-              {o}
+        <div className="camera-group" role="group" aria-label="カメラ">
+          {CAMERAS.map((camera) => (
+            <button
+              key={camera.id}
+              className={`icon${s.camera === camera.id ? " active" : ""}`}
+              aria-label={camera.label}
+              aria-pressed={s.camera === camera.id}
+              title={camera.label}
+              onClick={() => s.set({ camera: camera.id })}
+            >
+              {camera.icon}
+              <span className="tip">{camera.label}</span>
             </button>
           ))}
-          {s.question.allowFree && (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const text = new FormData(e.currentTarget).get("answer");
-                if (typeof text === "string" && text) answer(text);
-              }}
-            >
-              <input name="answer" placeholder="自由に入力" />
-              <button>送信</button>
-            </form>
-          )}
         </div>
-      )}
+      </div>
       {s.hit?.kind === "miss" && <div key={s.hit.at} className="miss-flash" />}
-      {s.error && <div className="error">{s.error}</div>}
+    </div>
+  );
+}
+
+function Question({
+  question,
+  onAnswer,
+}: {
+  question: NonNullable<ReturnType<typeof useAppStore.getState>["question"]>;
+  onAnswer: (text: string) => void;
+}) {
+  return (
+    <div className="question" role="dialog" aria-label="先生からの質問">
+      <p className="eyebrow">先生からの質問</p>
+      <p className="q-text">{question.text}</p>
+      <div className={`q-options${question.options.length > 3 ? " wide" : ""}`}>
+        {question.options.map((option, index) => (
+          <button
+            key={option}
+            className="q-option"
+            onClick={() => onAnswer(option)}
+          >
+            <span className="q-index">{index + 1}</span>
+            <span className="q-label">{option}</span>
+            <span className="q-arrow" aria-hidden="true">
+              →
+            </span>
+          </button>
+        ))}
+      </div>
+      {question.allowFree && (
+        <form
+          className="q-free"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const text = new FormData(e.currentTarget).get("answer");
+            if (typeof text === "string" && text) onAnswer(text);
+          }}
+        >
+          <input name="answer" placeholder="自由に入力" autoComplete="off" />
+          <button>送信</button>
+        </form>
+      )}
     </div>
   );
 }

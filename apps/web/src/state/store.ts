@@ -5,6 +5,7 @@ import type {
   Finger,
   LessonState,
   Plan,
+  RealtimeSummary,
   ScoreModel,
 } from "../types";
 
@@ -48,6 +49,8 @@ type AppState = {
   countInBeat: number | null;
   /** カウントインのテンポ（これから演奏させる bpm）。 */
   countInBpm?: number;
+  /** 直近の演奏の結果（stopPractice で入る）。演奏結果カードが見る。 */
+  lastResult?: { summary: RealtimeSummary; at: number };
   /** 最後に Web Speech の代替音声を使った時刻（Irodori が使えなかった）。 */
   fallbackVoiceAt?: number;
   error?: string;

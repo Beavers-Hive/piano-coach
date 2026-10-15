@@ -17,6 +17,7 @@ import { useAppStore } from "./state/store";
 import { connectSocket, send } from "./state/ws";
 import { Hud } from "./ui/Hud";
 import { Setup } from "./ui/Setup";
+import { Toasts } from "./ui/Toasts";
 
 const pcKeys: Record<string, number> = {
   a: 60,
@@ -173,7 +174,7 @@ export default function App() {
         lessonState: "briefing",
         camera: "play",
       });
-      return;
+      return playMockUi(new URLSearchParams(location.search).get("ui"), set);
     }
     connectSocket();
     void fetch("/api/songs")
@@ -220,14 +221,188 @@ export default function App() {
     }
     send("lesson.start", { songId });
   };
-  return entered ? (
-    <div className="app">
-      <PianoScene />
-      <Hud songs={songs} onSong={chooseSong} />
-    </div>
-  ) : (
-    <Setup onBegin={() => setEntered(true)} />
+  return (
+    <>
+      {entered ? (
+        <div className="app">
+          <PianoScene />
+          <Hud songs={songs} onSong={chooseSong} />
+        </div>
+      ) : (
+        <Setup onBegin={() => setEntered(true)} />
+      )}
+      <Toasts />
+    </>
   );
+}
+
+/**
+ * ?mock=1&ui=… で、画面ごとの状態を再現する（見た目の撮影と確認用）。カンマで組み合わせられる。
+ * dialogue / question / plan / result / countin / drill / playing / error
+ */
+function playMockUi(
+  ui: string | null,
+  set: (patch: Partial<AppStateLike>) => void,
+) {
+  if (!ui) return;
+  const timers: number[] = [];
+  const intervals: number[] = [];
+  const at = (ms: number, fn: () => void) =>
+    timers.push(window.setTimeout(fn, ms));
+  const kinds = ui.split(",");
+  const plan = {
+    goal: "メヌエットの右手を、なめらかに弾けるようになる",
+    currentStepId: "s3",
+    steps: [
+      {
+        id: "s1",
+        title: "5 本指のウォームアップ",
+        description: "ドからソまでを、ゆっくり均等に。",
+        status: "done" as const,
+      },
+      {
+        id: "s2",
+        title: "1〜4 小節をお手本どおりに",
+        description: "運指を確かめながら、まず目で追います。",
+        status: "done" as const,
+      },
+      {
+        id: "s3",
+        title: "右手だけで通して弾く",
+        description: "ゆっくりのテンポで、止まらずに最後まで。",
+        status: "doing" as const,
+      },
+      {
+        id: "s4",
+        title: "テンポを 80% に上げる",
+        description: "",
+        status: "todo" as const,
+      },
+      {
+        id: "s5",
+        title: "左手を合わせる",
+        description: "",
+        status: "todo" as const,
+      },
+    ],
+  };
+  for (const kind of kinds) {
+    switch (kind) {
+      case "dialogue":
+        set({
+          subtitle:
+            "メヌエット ト長調は、バッハの家で長く愛されてきた小品です。まずは右手のメロディーを、運指どおりに弾いてみましょう。",
+        });
+        break;
+      case "question":
+        set({
+          lessonState: "hearing",
+          waitingForStart: false,
+          camera: "overview",
+          subtitle: "",
+          question: {
+            questionId: "q1",
+            text: "ピアノの経験はどれくらいありますか？",
+            options: ["はじめて", "少し弾ける", "ふだんから弾く"],
+            allowFree: true,
+          },
+        });
+        break;
+      case "plan":
+        set({ plan });
+        break;
+      case "result":
+        set({ waitingForStart: false });
+        at(300, () =>
+          set({
+            lastResult: {
+              at: Date.now(),
+              summary: {
+                total: 16,
+                perfect: 14,
+                good: 2,
+                miss: 0,
+                extra: 1,
+                timingMeanMs: 12,
+                timingStdMs: 30,
+                perMeasure: [],
+                aborted: false,
+              },
+            },
+          }),
+        );
+        // 成績の違いも確認できるよう、?ui=result,low で低めの結果にする
+        if (kinds.includes("low"))
+          at(300, () =>
+            set({
+              lastResult: {
+                at: Date.now(),
+                summary: {
+                  total: 16,
+                  perfect: 8,
+                  good: 4,
+                  miss: 4,
+                  extra: 2,
+                  timingMeanMs: 40,
+                  timingStdMs: 60,
+                  perMeasure: [],
+                  aborted: false,
+                },
+              },
+            }),
+          );
+        break;
+      case "countin": {
+        set({ waitingForStart: false, countInBpm: 100, subtitle: "" });
+        let beat = 3;
+        const tick = () => {
+          set({ countInBeat: beat });
+          beat = beat === 1 ? 3 : beat - 1;
+        };
+        tick();
+        intervals.push(window.setInterval(tick, 600));
+        break;
+      }
+      case "drill":
+        set({
+          timeline: {
+            ...mockTimeline,
+            exerciseId: "drill-five-finger",
+            spec: {
+              ...mockTimeline.spec,
+              focus: "5 本指の基礎",
+              drill: { kind: "five_finger", startPitch: 60, key: "C", bars: 2 },
+            },
+          },
+          subtitle:
+            "まずは指ならし。ドから順に、5 本の指で上って下りましょう。",
+        });
+        break;
+      case "playing":
+        // 演奏中の見た目（状態表示、コンボ、手）
+        set({
+          waitingForStart: false,
+          running: true,
+          lessonState: "practicing",
+          handsMode: "ghost",
+          subtitle: "演奏中",
+          combo: 12,
+        });
+        break;
+      case "error":
+        set({
+          error:
+            "MIDI の権限が許可されていません。ブラウザの設定を確認するか、PC キーボードで続けてください。",
+        });
+        break;
+      default:
+        break;
+    }
+  }
+  return () => {
+    timers.forEach((timer) => window.clearTimeout(timer));
+    intervals.forEach((timer) => window.clearInterval(timer));
+  };
 }
 
 /** ?mock=1&import=1 のときだけ、楽譜の読み込みから課題の説明までを約 8 秒で再現する。 */

@@ -1,6 +1,6 @@
 import { useFrame, useThree } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
-import { Vector3 } from "three";
+import { useLayoutEffect, useMemo, useRef } from "react";
+import { PerspectiveCamera, Vector3 } from "three";
 import { useAppStore } from "../state/store";
 import type { CameraPreset } from "../types";
 import { KEYBOARD_EXTENT } from "./keyboardLayout";
@@ -46,8 +46,27 @@ function viewFor(preset: CameraPreset, centerX: number, spanX: number): View {
   }
 }
 
+/** 下部のダイアログが 3D の手やノーツを隠さないよう、描画の中心を画面の高さのこの割合だけ上へずらす。 */
+const VIEW_SHIFT_UP = 0.15;
+
 export function CameraRig() {
   const camera = useThree((state) => state.camera);
+  const size = useThree((state) => state.size);
+
+  // 描画を上へ寄せる（ウィンドウのリサイズにも追従する）
+  useLayoutEffect(() => {
+    if (!(camera instanceof PerspectiveCamera)) return;
+    camera.setViewOffset(
+      size.width,
+      size.height,
+      0,
+      Math.round(size.height * VIEW_SHIFT_UP),
+      size.width,
+      size.height,
+    );
+    return () => camera.clearViewOffset();
+  }, [camera, size.width, size.height]);
+
   const preset = useAppStore((state) => state.camera);
   const running = useAppStore((state) => state.running);
   const timeline = useAppStore((state) => state.timeline);

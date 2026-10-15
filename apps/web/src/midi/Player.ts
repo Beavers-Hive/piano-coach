@@ -163,6 +163,7 @@ export function stopPractice(aborted: boolean): void {
     running: false,
     lessonState: "reviewing",
     handsMode: "hidden",
+    lastResult: aborted ? undefined : { summary, at: Date.now() },
     subtitle: aborted
       ? "演奏を停止しました"
       : "おつかれさま！ 結果を確認しています。",

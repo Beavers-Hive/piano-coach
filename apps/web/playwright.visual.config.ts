@@ -8,8 +8,8 @@ export default defineConfig({
   timeout: 90_000,
   use: {
     baseURL: "http://127.0.0.1:5173",
-    viewport: { width: 1440, height: 900 },
     ...devices["Desktop Chrome"],
+    viewport: { width: 1440, height: 900 },
     launchOptions: { args: ["--use-angle=metal", "--enable-gpu"] },
   },
   webServer: {

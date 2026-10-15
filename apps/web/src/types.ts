@@ -42,6 +42,15 @@ export type ExerciseSpec = {
   loop: number;
   metronome: boolean;
   focus?: string;
+  /** 基礎練習のときだけ（docs/contracts.md の DrillSpec） */
+  drill?: DrillSpec;
+};
+export type DrillSpec = {
+  kind: "five_finger" | "rhythm" | "scale";
+  startPitch: number;
+  key?: "C" | "G" | "F" | "D";
+  rhythm?: string;
+  bars: number;
 };
 export type TimelineNote = {
   playId: string;
