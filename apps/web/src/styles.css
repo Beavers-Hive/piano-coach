@@ -132,282 +132,219 @@ button:disabled {
   color: var(--ink);
 }
 
-/* ---------- 準備画面 ---------- */
+/* ---------- 準備画面 ----------
+   装飾より機能。宣伝文句・グラデーション・光る背景は使わず、
+   「レッスン前の確認」を番号付きのチェックリストとして見せる。 */
 .setup {
-  position: relative;
   display: grid;
   min-height: 100vh;
+  padding: 56px var(--gutter);
+  background: #07090f;
   place-items: center;
-  overflow: hidden;
-  background:
-    radial-gradient(ellipse 70% 55% at 72% 8%, #14306a 0%, transparent 70%),
-    radial-gradient(ellipse 60% 50% at 8% 90%, #2a0f45 0%, transparent 70%),
-    #03050d;
+  overflow: auto;
 }
-.setup-stage {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+.setup-sheet {
+  width: min(640px, 100%);
 }
-.setup-glow {
-  position: absolute;
-  top: 18%;
-  left: 50%;
-  width: 900px;
-  height: 500px;
-  transform: translateX(-50%);
-  background: radial-gradient(
-    ellipse,
-    rgba(98, 221, 255, 0.1),
-    transparent 65%
-  );
+.setup-header {
+  margin-bottom: 28px;
 }
-.setup-keys {
-  position: absolute;
-  right: -10%;
-  bottom: -6%;
-  left: -10%;
-  height: 46%;
-  transform: perspective(520px) rotateX(58deg);
-  transform-origin: 50% 100%;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 66px,
-      rgba(120, 210, 255, 0.28) 66px 68px
-    ),
-    linear-gradient(
-      0deg,
-      rgba(98, 221, 255, 0.22),
-      rgba(98, 221, 255, 0.02) 70%
-    );
-  mask-image: linear-gradient(0deg, #000 10%, transparent 92%);
-}
-.setup-note {
-  position: absolute;
-  top: -160px;
-  width: 30px;
-  border-radius: 6px;
-  background: linear-gradient(180deg, transparent, var(--cyan));
-  opacity: 0.5;
-  box-shadow: 0 0 24px rgba(98, 221, 255, 0.55);
-  animation: setup-fall linear infinite;
-}
-.setup-note:nth-child(3n) {
-  background: linear-gradient(180deg, transparent, var(--magenta));
-  box-shadow: 0 0 24px rgba(255, 95, 176, 0.5);
-}
-@keyframes setup-fall {
-  0% {
-    transform: translateY(0);
-    opacity: 0;
-  }
-  15% {
-    opacity: 0.55;
-  }
-  100% {
-    transform: translateY(calc(100vh + 200px));
-    opacity: 0;
-  }
-}
-.setup-card {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1.05fr 1fr;
-  width: min(1060px, 92vw);
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 28px;
-  background: rgba(8, 15, 32, 0.66);
-  backdrop-filter: blur(24px) saturate(1.3);
-  box-shadow: var(--shadow-l);
-  animation: rise 0.8s var(--ease) both;
-}
-.setup-card::before {
-  content: "";
-  position: absolute;
-  top: -1px;
-  right: 12%;
-  left: 12%;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
-  box-shadow: 0 0 14px var(--cyan);
-}
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-}
-.setup-hero {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 56px 48px;
-}
-.setup-logo {
+.setup-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 44px;
+  gap: 10px;
+  margin-bottom: 28px;
+  color: var(--ink-2);
   font-size: 15px;
-  font-weight: 800;
-  letter-spacing: 0.26em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
-.setup-logo em,
 .brand em {
   color: var(--cyan);
   font-style: normal;
 }
-.setup h1 {
-  margin: 0;
-  font-size: 46px;
-  font-weight: 800;
-  line-height: 1.25;
+.setup-header h1 {
+  margin: 0 0 6px;
+  font-size: 28px;
+  font-weight: 700;
   letter-spacing: 0.01em;
 }
-.setup h1 span {
-  display: block;
-  margin-top: 14px;
-  font-size: 21px;
-  font-weight: 600;
-  line-height: 1.55;
-  background: linear-gradient(100deg, var(--cyan-hi), var(--cyan) 50%, #ff8ec6);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.setup .lead {
-  max-width: 30em;
-  margin: 24px 0 0;
-  color: var(--ink-2);
+.setup-header p {
+  margin: 0;
+  color: var(--ink-3);
   font-size: 14px;
-  line-height: 1.9;
 }
-.setup-features {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 28px 0 0;
+.steps {
+  margin: 0;
   padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
   list-style: none;
 }
-.setup-features li {
-  padding: 6px 13px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--ink-2);
-  background: var(--glass-fill);
-  font-size: 12px;
+.step {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 16px;
+  padding: 20px 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-.setup-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 40px 40px 36px;
-  border-left: 1px solid var(--line);
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.035),
-    rgba(255, 255, 255, 0.01)
-  );
-}
-.setup-panel p {
-  margin: 0;
-}
-.setup .wide {
-  width: 100%;
-  padding: 14px;
-  font-size: 15px;
-}
-.setup .primary.done {
-  position: relative;
-  color: var(--mint);
-  background: rgba(109, 240, 194, 0.1);
-  border: 1px solid rgba(109, 240, 194, 0.4);
-  box-shadow: none;
-  opacity: 1;
-}
-.setup .primary.done::before {
-  content: "✓ ";
-}
-.checks {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--line);
-  border-radius: var(--r-m);
-  background: rgba(3, 7, 18, 0.35);
-}
-.check {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 44px;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink-2);
-  font-size: 13px;
-}
-.check:last-child {
+.step:last-child {
   border-bottom: 0;
 }
-.check i {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: 50%;
-  background: var(--amber);
-  box-shadow: 0 0 10px rgba(255, 196, 107, 0.6);
-}
-.check i.ok {
-  background: var(--mint);
-  box-shadow: 0 0 12px var(--mint);
-}
-.check b {
-  margin-left: auto;
-  color: var(--ink-3);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-.check.ok b {
-  color: var(--cyan);
-}
-.midi-select {
+.step-index {
   display: grid;
-  grid-template-columns: 1fr 190px;
-  gap: 6px 10px;
-  align-items: center;
-  color: var(--ink-2);
-  font-size: 13px;
-}
-.midi-select small {
-  grid-column: 1 / -1;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
   color: var(--ink-3);
-  font-size: 11px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  place-items: center;
 }
-.setup .note,
-.setup p[role="status"] {
+.step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.step h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.step p {
+  margin: 4px 0 0;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.7;
+}
+.step-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+.step-action .voice-warning {
+  flex-basis: 100%;
+  margin: 0;
+}
+.key-probe {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 状態のチップ（色付きの点 + 短い文） */
+.chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
   color: var(--ink-2);
   font-size: 12px;
-  line-height: 1.7;
+  font-weight: 600;
+}
+.chip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+.chip-ok i {
+  background: var(--mint);
+}
+.chip-ok {
+  color: var(--mint);
+}
+.chip-warn i {
+  background: var(--amber);
+}
+.chip-warn {
+  color: var(--amber);
+}
+.chip-busy i {
+  background: var(--cyan);
+  animation: chip-pulse 1s ease-in-out infinite;
+}
+@keyframes chip-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* ボタン: 単色。無効状態ははっきり減光する */
+.btn {
+  padding: 9px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: none;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    opacity 0.15s;
+}
+.btn:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+}
+.btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.btn-primary {
+  padding: 12px 22px;
+  border-color: transparent;
+  background: var(--cyan);
+  color: #04131c;
+  font-size: 14px;
+}
+.btn-primary:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--cyan-hi);
+}
+.setup-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+}
+.setup-hint {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.midi-select select {
+  min-width: 240px;
+  padding: 8px 34px 8px 12px;
+  font-size: 13px;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 .voice-ok {
   color: var(--mint) !important;
 }
 .voice-warning {
-  color: var(--magenta-hi) !important;
-}
-.setup-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: auto;
-  padding-top: 6px;
-}
-.setup-actions .primary {
-  flex: 1;
-  padding: 12px 18px;
+  color: var(--amber) !important;
+  font-size: 12px;
 }
 
 /* ---------- 共通のフォーム部品 ---------- */
@@ -976,12 +913,6 @@ header .ghost {
 
 /* ---------- 画面が狭いとき ---------- */
 @media (max-width: 1100px) {
-  .setup-hero {
-    padding: 44px 36px;
-  }
-  .setup h1 {
-    font-size: 38px;
-  }
   header .ghost {
     font-size: 0;
     gap: 0;
@@ -991,15 +922,6 @@ header .ghost {
 @media (max-width: 900px) {
   .setup {
     place-items: start center;
-    overflow-y: auto;
-  }
-  .setup-card {
-    grid-template-columns: 1fr;
-    margin: 4vh 0;
-  }
-  .setup-panel {
-    border-top: 1px solid var(--line);
-    border-left: 0;
   }
   .plan {
     display: none;
