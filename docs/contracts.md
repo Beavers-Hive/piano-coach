@@ -141,7 +141,7 @@ type LessonState = "idle" | "importing" | "analyzing" | "hearing" | "planning"
 
 | type | payload | 説明 |
 |---|---|---|
-| lesson.start | `{ songId: string }` | 曲を選んで開始する |
+| lesson.start | `{ songId: string, resume?: boolean }` | 曲を選んで開始する。`resume: true` のときは、保存した進捗（下の「途中からの再開」）から再開する。保存がなければ、通常の開始と同じ |
 | hearing.answer | `{ questionId: string, answer: string }` | |
 | user.message | `{ text: string }` | 自由入力 |
 | voice.done | `{ utteranceId: string }` | 発話の再生がすべて終わった |
@@ -163,7 +163,7 @@ type LessonState = "idle" | "importing" | "analyzing" | "hearing" | "planning"
 
 | メソッド | パス | 応答 |
 |---|---|---|
-| GET | /api/songs | `{ songs: { songId, title, composer }[] }`（assets/scores の中身） |
+| GET | /api/songs | `{ songs: { songId, title, composer, progress: SavedProgress \| null }[] }`（assets/scores の中身。progress は保存済みの進捗の要約） |
 | POST | /api/songs | multipart の `file`（PDF）→ `{ songId }`。sha256 で assets/scores の PDF と照合する。一致しない場合は 422 |
 | GET | /api/songs/{songId}/pages/{n}.png | ページ画像 |
 | GET | /api/tts/{hash}.wav | 生成済みの音声 |
@@ -204,3 +204,32 @@ class VoiceService:
 - `exercise.ready` を受けたら、`/api/exercises/{exerciseId}/score.musicxml` を取得して描く。
 - 再生と演奏の間は、`getPlayheadMs()` に合わせてカーソルを動かし、いま弾く音を強調する。Verovio の timemap（MusicXML のテンポ＝timeline.bpm なので、Verovio の時刻と playhead が一致する）で、時刻と音符の要素を対応付ける。
 - 判定の結果（perfect / good / miss）を、楽譜の音符の色にも反映する。
+
+## 途中からの再開（ローカル保存）
+
+アプリを閉じて開き直しても、前回の続きからレッスンを再開できる。保存先はサーバーのローカルフォルダ（`data/lessons/<songId>.json`。フェイクのサーバーは data-e2e/ 側）。
+
+```ts
+// GET /api/songs の各曲に付く。保存がない、または最後まで終えた曲は null
+type SavedProgress = {
+  stepIndex: number;        // いまのステップ（0 始まり）
+  stepCount: number;        // 計画のステップ数
+  stepTitle: string;        // いまのステップの題
+  goal: string;             // 計画の目標
+  updatedAt: string;        // ISO 8601（UTC）
+  finished: boolean;        // 最後まで終えた。true のときは続きを出さない（API は progress を null にして返す）
+};
+```
+
+保存する内容（サーバー内部。契約の対象外）: 計画（goal、steps、各 exerciseTemplate、status）、いまのステップ番号、いまの課題の ExerciseSpec、ヒアリングの質問と回答、直近 5 回の演奏結果（課題・RealtimeSummary・判定）、保存日時。保存するタイミング: 計画が確定したとき、ステップが進んだとき、演奏の結果を処理したとき、課題が決まったとき、レッスンを終えたとき。
+
+### 再開の流れ（`lesson.start` に `resume: true`）
+1. server は、通常どおり `song.ready`、`song.analysis`、運指（キャッシュ）を送る。**ヒアリングと計画作りは飛ばす。**
+2. 保存した計画を `plan.updated` で送り、いまのステップに合わせて status を復元する。
+3. エージェントに `[RESUME]`（保存した計画、いまのステップ、ヒアリングの回答、直近の演奏結果）を送る。エージェントは、おかえりなさいの一言と、`start_exercise` か `demo` を返す。エージェントが失敗・タイムアウトしたら、代行処理で「おかえりなさい。前回の続きからいこう」と話し、いまのステップの課題をそのまま始める（保存した課題があればそれを使う）。
+4. 以降は通常のレッスンと同じ。
+
+### フロント
+- アプリを開いて準備画面を終えたとき、保存済みの進捗（progress が null でない曲）があれば、いちばん新しいものについて「続きから／最初から」のカードを出す。
+- 曲を選んだとき（または PDF を渡したとき）に、その曲に保存済みの進捗があれば、同じカードを出す。
+- 「続きから」→ `lesson.start { songId, resume: true }`。「最初から」→ `lesson.start { songId }`（保存は、最初の保存のタイミングで上書きされる）。
