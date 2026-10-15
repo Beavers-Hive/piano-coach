@@ -1,3 +1,3 @@
-from .builder import ExerciseBuilder, ExerciseSpec, ExerciseTimeline, FingeringEvent
+from .builder import DrillSpec, ExerciseBuilder, ExerciseSpec, ExerciseTimeline, FingeringEvent
 
-__all__ = ["ExerciseBuilder", "ExerciseSpec", "ExerciseTimeline", "FingeringEvent"]
+__all__ = ["DrillSpec", "ExerciseBuilder", "ExerciseSpec", "ExerciseTimeline", "FingeringEvent"]

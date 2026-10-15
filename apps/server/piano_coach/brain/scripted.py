@@ -20,6 +20,8 @@ def _message_parts(message: BrainInput) -> tuple[str, dict]:
 class ScriptedBrain:
     def __init__(self) -> None:
         self.answer_count = 0
+        self.low_attempt_count = 0
+        self.drill_return_exercise: dict | None = None
 
     async def open(self, **_: object) -> str:
         return "scripted-session"
@@ -59,6 +61,34 @@ class ScriptedBrain:
             yield SayDelta(text="いいね。今度は自分でひいてみよう。")
             yield ActionReady(action={"type": "start_exercise", "exercise": {**spec, "mode": "wait"}})
         elif kind == "ATTEMPT_RESULT":
+            exercise = body.get("exercise") or {}
+            summary = body.get("summary") or {}
+            total = summary.get("total", 0)
+            accuracy = (summary.get("perfect", 0) + summary.get("good", 0)) / total if total else 0
+            if exercise.get("drill"):
+                if accuracy >= .95 and self.drill_return_exercise:
+                    restored, self.drill_return_exercise = self.drill_return_exercise, None
+                    self.low_attempt_count = 0
+                    yield SayDelta(text="準備運動ができたね。もとのフレーズに戻ろう。")
+                    yield ActionReady(action={"type": "start_exercise", "exercise": restored})
+                    return
+                yield SayDelta(text="指を順番に動かして、もう一回やってみよう。")
+                yield ActionReady(action={"type": "retry"})
+                return
+            if body.get("suggestedVerdict") == "retry" and accuracy < .70:
+                self.low_attempt_count += 1
+                if self.low_attempt_count >= 2:
+                    self.low_attempt_count = 0
+                    self.drill_return_exercise = exercise
+                    hand = exercise.get("hand", "right")
+                    yield SayDelta(text="いったん曲から離れて、指の準備運動をしよう。")
+                    yield ActionReady(action={"type": "start_exercise", "exercise": {
+                        **exercise, "hand": hand, "tempoPercent": 60, "mode": "wait", "loop": 1,
+                        "focus": "5本の指を順番に", "drill": {"kind": "five_finger", "startPitch": 60, "key": "C", "bars": 2},
+                    }})
+                    return
+            else:
+                self.low_attempt_count = 0
             verdict = body.get("suggestedVerdict", "retry")
             yield SayDelta(text="よくできたね。")
             yield ActionReady(action={"type": verdict})

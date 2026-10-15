@@ -64,6 +64,42 @@ def test_fake_server_starts(monkeypatch):
         assert client.get("/api/health").json()["tts"] is True
 
 
+def test_scripted_brain_switches_to_drill_after_two_poor_attempts(monkeypatch):
+    monkeypatch.setenv("PIANO_COACH_FAKE_BRAIN", "1")
+    monkeypatch.setenv("PIANO_COACH_FAKE_TTS", "1")
+    with TestClient(create_app()) as client, client.websocket_connect("/ws") as ws:
+        song_id = client.get("/api/songs").json()["songs"][1]["songId"]
+        ws.send_json({"type": "lesson.start", "payload": {"songId": song_id}})
+        receive_until(ws, "agent.ask")
+        ws.send_json({"type": "hearing.answer", "payload": {"questionId": "experience", "answer": "はじめて"}})
+        receive_until(ws, "agent.ask")
+        ws.send_json({"type": "hearing.answer", "payload": {"questionId": "range", "answer": "最初から"}})
+        demo, _ = receive_until(ws, "demo.play")
+        ws.send_json({"type": "demo.finished", "payload": demo["payload"]})
+        ready, _ = receive_until(ws, "exercise.ready")
+
+        def start_practice(timeline):
+            clip, _ = receive_until(ws, "voice.clip")
+            while not clip["payload"]["text"].startswith("次は"):
+                clip, _ = receive_until(ws, "voice.clip")
+            ws.send_json({"type": "voice.done", "payload": {"utteranceId": clip["payload"]["utteranceId"]}})
+            ws.send_json({"type": "practice.started", "payload": {"exerciseId": timeline["exerciseId"], "exerciseVersion": timeline["exerciseVersion"]}})
+            receive_until(ws, "lesson.state")
+
+        def submit_poor(timeline):
+            ws.send_json({"type": "attempt.submit", "payload": {"exerciseId": timeline["exerciseId"], "exerciseVersion": timeline["exerciseVersion"],
+                "summary": {"total": 10, "perfect": 6, "good": 0, "miss": 4, "extra": 0, "timingMeanMs": None,
+                            "timingStdMs": None, "perMeasure": [], "aborted": False}}})
+
+        start_practice(ready["payload"]["timeline"])
+        submit_poor(ready["payload"]["timeline"])
+        retry_ready, _ = receive_until(ws, "exercise.ready")
+        start_practice(retry_ready["payload"]["timeline"])
+        submit_poor(retry_ready["payload"]["timeline"])
+        drill_ready, _ = receive_until(ws, "exercise.ready")
+        assert drill_ready["payload"]["timeline"]["spec"]["drill"]["kind"] == "five_finger"
+
+
 def test_broken_brain_uses_hearing_fallback(monkeypatch):
     monkeypatch.setenv("PIANO_COACH_FAKE_BRAIN", "1")
     monkeypatch.setenv("PIANO_COACH_FAKE_BRAIN_MODE", "broken_json")

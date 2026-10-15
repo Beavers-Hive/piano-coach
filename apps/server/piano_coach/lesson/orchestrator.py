@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import json
 import logging
 import uuid
@@ -10,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from piano_coach.brain.base import ActionReady, BrainError, SayDelta, TutorBrain, format_message
-from piano_coach.exercise.builder import ExerciseBuilder, ExerciseSpec
+from piano_coach.exercise.builder import DrillSpec, ExerciseBuilder, ExerciseSpec
 from piano_coach.lesson.actions import AgentAction, validate_action
 from piano_coach.lesson.verdict import RealtimeSummary, suggested_verdict
 from piano_coach.paths import DATA_DIR
@@ -22,7 +23,8 @@ Send = Callable[[str, dict], Awaitable[None]]
 _END = object()
 LESSON_TURN_TIMEOUT_S = 25
 ANALYSIS_TIMEOUT_S = 60
-FINGERING_CHUNK_TIMEOUT_S = 120
+# Opus（推論: 高）は 1 チャンクに数分かかることがある。事前生成のスクリプトでは、さらに長くする
+FINGERING_CHUNK_TIMEOUT_S = float(os.environ.get("PIANO_COACH_FINGERING_TIMEOUT", "300"))
 
 
 class LessonOrchestrator:
@@ -34,6 +36,9 @@ class LessonOrchestrator:
         self._brain_lock, self._send_lock = asyncio.Lock(), asyncio.Lock()
         self._builder, self._queued_user_messages = ExerciseBuilder(), []
         self._attempt_counts: dict[tuple, int] = defaultdict(int)
+        self._poor_retry_streak = 0
+        self._poor_retry_key: tuple | None = None
+        self._drill_return_spec: ExerciseSpec | None = None
         self._owned_tasks: set[asyncio.Task] = set()
         self._voice_workers: set[asyncio.Task] = set()
         self._active_utterances: set[str] = set()
@@ -269,6 +274,13 @@ class LessonOrchestrator:
 
     def exercise_instruction(self, spec: ExerciseSpec) -> str:
         hand = {"right": "右手", "left": "左手", "both": "両手"}[spec.hand]
+        if spec.drill:
+            drill_text = {
+                "five_finger": f"{hand}の5本の指で、ゆっくり上り下りしてみよう。",
+                "scale": f"{hand}で、ゆっくり音階を上り下りしてみよう。",
+                "rhythm": f"{hand}で、同じ音をリズムに合わせてひいてみよう。",
+            }[spec.drill.kind]
+            return f"次は基礎練習。{drill_text}"
         bpm = self.score.bpm * spec.tempoPercent / 100 if self.score else 60
         pace = "ゆっくり" if bpm < 70 else "すこしゆっくり" if bpm < 100 else "もとのテンポで"
         return f"次は{hand}で、{spec.measures[0]}から{spec.measures[1]}しょうせつめを、{pace}ひいてみよう。"
@@ -295,9 +307,50 @@ class LessonOrchestrator:
         action = await self._brain_turn("ATTEMPT_RESULT", {"exercise": self.timeline.spec.model_dump(), "summary": summary.model_dump(), "suggestedVerdict": verdict, "attemptCountOnThisExercise": self._attempt_counts[key]})
         if action: await self.apply_action(action)
         else:
-            await self._speak_fixed("よくがんばったね。もう一回確認してみよう。"); await self.prepare_exercise(fallback)
+            await self._speak_fixed("よくがんばったね。もう一回確認してみよう。")
+            await self.prepare_exercise(self._fallback_exercise(summary, verdict, fallback))
         queued, self._queued_user_messages = self._queued_user_messages, []
         for text in queued: await self.user_message(text)
+
+    def _fallback_exercise(self, summary: RealtimeSummary, verdict: str, fallback: ExerciseSpec) -> ExerciseSpec:
+        """Choose a safe deterministic recovery when the tutor did not act.
+
+        Two genuinely poor retries on the same phrase become a short,
+        score-independent warm-up.  A clearly successful warm-up returns to
+        the exact phrase that caused it, rather than leaving the learner in an
+        unrelated exercise.
+        """
+        assert self.timeline is not None
+        current = self.timeline.spec
+        accuracy = (summary.perfect + summary.good) / summary.total if summary.total else 0.0
+        if current.drill:
+            if accuracy >= .95 and self._drill_return_spec is not None:
+                restored, self._drill_return_spec = self._drill_return_spec, None
+                self._poor_retry_streak = 0
+                self._poor_retry_key = None
+                return restored
+            return fallback
+
+        phrase_key = (current.measures, current.hand, current.mode)
+        if verdict == "retry" and accuracy < .70:
+            self._poor_retry_streak = self._poor_retry_streak + 1 if self._poor_retry_key == phrase_key else 1
+            self._poor_retry_key = phrase_key
+        else:
+            self._poor_retry_streak = 0
+            self._poor_retry_key = None
+        if self._poor_retry_streak < 2:
+            return fallback
+
+        first_note = min(self.timeline.notes, key=lambda note: note.startMs)
+        start_pitch = max(21, min(101, first_note.pitch))
+        key = {1: "G", -1: "F", 2: "D"}.get(self.score.keyFifths if self.score else 0, "C")
+        self._drill_return_spec = current.model_copy(deep=True)
+        self._poor_retry_streak = 0
+        self._poor_retry_key = None
+        return current.model_copy(update={
+            "tempoPercent": 60, "mode": "wait", "loop": 1,
+            "focus": "5本の指を順番に", "drill": DrillSpec(kind="five_finger", startPitch=start_pitch, key=key, bars=2),
+        })
 
     async def user_message(self, text: str) -> None:
         if self.state == "practicing": self._queued_user_messages.append(text); return
@@ -323,10 +376,11 @@ class LessonOrchestrator:
         if action: await self.apply_action(action)
         else: await self.prepare_exercise(step["exercise"])
 
-    async def estimate_fingering(self) -> None:
+    async def estimate_fingering(self, force: bool = False) -> None:
+        """force=True のときはキャッシュを使わずに設計し直す（成功したときだけ上書きする）。"""
         assert self.score
         cache = self._song_dir() / "fingering.json"
-        if cache.exists():
+        if cache.exists() and not force:
             try: await self._replay_fingering(json.loads(cache.read_text())); return
             except (OSError, json.JSONDecodeError, KeyError) as error: log.warning("fingering cache ignored: %s", error)
         updates: list[dict] = []
