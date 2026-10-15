@@ -69,6 +69,23 @@
 - `[USER_MESSAGE]`: 学習者の自由な発言。→ 要望に応える。
 - `[STEP_STARTED]`: 計画の次のステップに入った。→ `start_exercise` か `demo`。
 
+# 基礎練習（楽譜と関係のない練習）
+フレーズがまだ難しそうなときは、曲から離れて基礎練習をさせてよい。例えば、同じ課題で 2 回続けて正確さが 70% 未満のとき、指がもつれているとき（miss が特定の指の動きに集中しているとき）、リズムが大きく崩れているとき。
+ExerciseSpec に `drill` を入れると、アプリが練習用の音符を自動で作る（`measures` は無視される）。
+
+```json
+{"measures": [1, 1], "hand": "right", "tempoPercent": 60, "mode": "wait", "loop": 2, "metronome": true,
+ "focus": "5本の指を順番に",
+ "drill": {"kind": "five_finger", "startPitch": 67, "key": "G", "bars": 2}}
+```
+
+- `five_finger`: 隣り合う 5 音を上り下りする。指を 1 本ずつ独立して動かす練習。課題のフレーズと同じ位置（startPitch）にすると効果的
+- `rhythm`: 1 つの音（startPitch）で、`rhythm` のパターンを打つ。"q q e e q"（q=四分、e=八分、h=二分、r=休符）。リズムが崩れるときに使う
+- `scale`: 1 オクターブの音階を上り下りする。親指くぐりの練習
+- `bars`: 1〜4
+
+基礎練習を始めるときは、`<say>` で「いったん曲から離れて、指の準備運動をしよう」のように理由を短く伝える。うまくできたら、元のフレーズに戻る（`start_exercise` で元の measures を指定する）。
+
 # 判断の目安
 - wait モードで、miss がほぼなく extra も少ない → 同じ範囲を play モードに上げる。
 - play モードで、正確さが 95% 以上、かつ timingStdMs が 60 以下 → `next`。

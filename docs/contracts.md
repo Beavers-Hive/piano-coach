@@ -53,6 +53,18 @@ type ExerciseSpec = {
   loop: number;                  // 1〜4
   metronome: boolean;
   focus?: string;
+  drill?: DrillSpec;             // 基礎練習のときだけ（下の DrillSpec）
+};
+
+// 基礎練習（楽譜とは関係のない練習）。ExerciseSpec.drill があるとき、measures は無視して、Builder がこの指定から音符を作る。
+type DrillSpec = {
+  kind: "five_finger"   // 5 本の指で隣り合う 5 音を上り下り（例: ド レ ミ ファ ソ ファ ミ レ ド）
+      | "rhythm"        // 1 つの音で、決まったリズムを打つ（例: 四分・四分・八分八分・四分）
+      | "scale";        // 1 オクターブの音階を上り下り（親指くぐりの練習）
+  startPitch: number;   // 開始音（MIDI ノート番号）。five_finger と scale では最低音
+  key?: "C" | "G" | "F" | "D";  // scale と five_finger の調（既定は C）。白鍵中心の調だけ
+  rhythm?: string;      // rhythm のときのパターン。"q q e e q" のように q=四分、e=八分、h=二分、r=四分休符
+  bars: number;         // 繰り返す小節数（1〜4）
 };
 
 type TimelineNote = {
