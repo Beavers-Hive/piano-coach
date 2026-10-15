@@ -1,4 +1,6 @@
-# サーバー（Codex）
+# サーバー（Gemini / Google Cloud）
+
+> **Google Cloud版はGemini、ローカル版はCodexを使えます。** `GOOGLE_CLOUD_PROJECT`（または`PORT`）を設定した環境はGemini／Cloud Text-to-Speech、それ以外はCodex／ローカルTTSが既定です。`PIANO_COACH_BRAIN_PROVIDER=codex|gemini`、`PIANO_COACH_VOICE_PROVIDER=irodori|google` で明示指定できます。Cloud Runの手順は[docs/cloud-run.md](../../docs/cloud-run.md)を参照してください。
 
 先生との対話・楽譜画像の解析・運指設計は Codex CLI で実行する。
 事前に `codex login` で ChatGPT にログインする。

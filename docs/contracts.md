@@ -1,5 +1,13 @@
 # 実装の契約（今夜版）
 
+## Google Cloud版の追加（2026-10-15）
+
+WebSocketの型と既存イベント名は維持する。Cloud Runでは`PORT`（既定8080）を`0.0.0.0`で待ち受け、静的なフロントとAPIを同じホストから配信する。ローカル開発のポートは従来のまま。
+
+先生の標準実装はGeminiBrain。`/api/health`は既存の`claude`・`tts`を維持し、`brainProvider`・`model`・`ttsProvider`を追加する。互換キー`claude`はAIの設定準備状態を表す。
+
+標準の音声はGoogle Cloud Text-to-Speech。`/api/voice/test`の`engine`には従来の`irodori`・`webspeech`に加えて`google`を許可する。音声URL・voice.clipの形式は変えない。Irodori専用サーバーは`PIANO_COACH_VOICE_PROVIDER=irodori`を指定したときだけ使用する。
+
 フロント（apps/web）、サーバー（apps/server）、TTS（tts/）は別々のエージェントが並行して作る。
 **このファイルに書いた形式だけで通信すること。** 変更が必要な場合は、勝手に変えずに報告する。
 DESIGN.md と食い違う場合は、このファイルを優先する。

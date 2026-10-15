@@ -44,7 +44,13 @@ test("fake-brain lesson completes a guided wait-mode attempt", async ({
     page.getByRole("button", { name: "鍵盤を押してスタート" }),
   ).toBeVisible({ timeout: 15_000 });
   await page.evaluate(() => window.__pianoCoach?.pressKey(60));
-  await page.waitForTimeout(2_000);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => Boolean(window.__pianoCoach?.getState().running)),
+      { timeout: 10_000 },
+    )
+    .toBe(true);
   await page.evaluate(() => {
     const api = window.__pianoCoach;
     const timeline = api?.getState().timeline;

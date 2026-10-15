@@ -14,8 +14,12 @@ test("voice test goes through the server and reports the engine", async ({
   await page.goto("/");
   await page.getByRole("button", { name: "先生の声をテスト" }).click();
   await expect(
-    page.getByText("Irodori に接続できていません（ブラウザの音声で代替中）"),
+    page.getByText(
+      "先生の音声を取得できませんでした（ブラウザの音声で代替中）",
+    ),
   ).toBeVisible();
   expect(requests).toEqual(["POST"]);
-  await expect(page.getByText("Irodori（先生の声）")).toBeVisible();
+  await expect(
+    page.getByText("先生の声で短い文を読み上げ、音声の準備を確認します。"),
+  ).toBeVisible();
 });

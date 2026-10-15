@@ -20,3 +20,7 @@ data-e2e/
 credentials.json
 service-account*.json
 docs/reviews/*.log
+dist/
+*.tsbuildinfo
+test-results*/
+playwright-report/

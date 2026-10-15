@@ -1,5 +1,9 @@
 # piano-coach
 
+## Google Cloud版（2026-10-15）
+
+`feat/gemini-cloud-run`ではGemini / Cloud Run対応を行う。現在の起動経路はGeminiBrain、音声はGoogle Cloud Text-to-Speech。Cloud Run用の構成と起動方法はREADME.mdとdocs/cloud-run.mdを優先する。下記のClaude / Irodori専用の制約は従来のローカル版に対するもの。既存の通信形式を維持し、`/api/health`の`claude`は互換キーとして残す。
+
 PDF の楽譜を渡すと、AI の先生が 3D で指導してくれるピアノ練習アプリ（ハッカソン用、ローカルで動かす）。
 
 - 仕様: docs/DESIGN.md

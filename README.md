@@ -1,5 +1,21 @@
 # piano-coach
 
+## Google Cloud版（feat/gemini-cloud-run）
+
+「この曲を弾きたい」に寄り添うAIピアノコーチ。先生は **Gemini 3.5 Flash（Vertex AI）**、声は **Google Cloud Text-to-Speech**。Reactの画面とFastAPI / WebSocketを **Cloud Run** の同じコンテナで配信します。
+
+現在の起動方法・デプロイ・制約は **[docs/cloud-run.md](docs/cloud-run.md)** を参照してください。このブランチの標準起動ではClaude / Codexへのログインや、ローカルのIrodoriサーバーは不要です。
+
+ローカルではPython 3.12 / uv / Node.jsを用意し、`gcloud auth application-default login`で認証して、`GOOGLE_CLOUD_PROJECT`を指定します。サーバーは`cd apps/server && uv run piano-coach-server`、画面は`cd apps/web && npm ci && npm run dev`で起動できます。
+
+デプロイはリポジトリルートから`./scripts/deploy-cloud-run.sh PROJECT_ID asia-northeast1`。Chromeで公開URLを開き、音声を有効にして、MIDIキーボードを選び、メヌエットからレッスンを始めてください。PCキーボードでも代用できます。
+
+現在の対応曲は同梱の「メヌエット ト長調」「エリーゼのために」。PDFは同梱PDFとMIDIを照合する方式です。進行中のレッスンはメモリ、解析・運指・音声のキャッシュはインスタンス内の一時領域であり、ページ再読み込みや接続断では最初からになります。
+
+以下は従来のローカル版の記録です。Google Cloud版では上記とdocs/cloud-run.mdを優先してください。
+
+## 従来のローカル版
+
 楽譜の PDF を渡すだけで、AI の先生が専属でピアノを教えてくれるアプリ（ハッカソンのデモ用、ローカルで動かす）。
 
 - 先生は **Claude**（サブスクでログインした Claude Code を、claude-agent-sdk 経由で動かす）

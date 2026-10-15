@@ -1,0 +1,26 @@
+.git
+**/.venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/test-results*
+**/playwright-report
+apps/web/dist
+data*
+vendor
+spikes
+tts
+submission-drafts
+.env*
+**/.env*
+**/*credentials*.json
+**/*service-account*.json
+
+# Local agent settings and private material
+.claude
+.codex-tasks
+docs/reviews/*.log
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx

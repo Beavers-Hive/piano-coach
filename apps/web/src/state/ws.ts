@@ -168,7 +168,8 @@ export function handleIncomingMessage({ type, payload }: WireMessage): void {
       }
       state.set({
         timeline: payload.timeline as ExerciseTimeline,
-        waitingForStart: true,
+        waitingForStart:
+          (payload.timeline as ExerciseTimeline).spec.mode !== "watch",
         lessonState: "briefing",
         combo: 0,
         camera: "play",

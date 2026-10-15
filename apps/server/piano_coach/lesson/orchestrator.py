@@ -189,7 +189,7 @@ class LessonOrchestrator:
         assert self.score
         counts = {measure.index: {"right": 0, "left": 0} for measure in self.score.measures}
         for note in self.score.notes: counts[note.measure][note.hand] += 1
-        return {"title": analysis.get("title", self.score.title), "timeSignature": self.score.timeSignature.model_dump(), "bpm": self.score.bpm,
+        return {"title": analysis.get("title", self.score.title), "composer": self.score.composer, "timeSignature": self.score.timeSignature.model_dump(), "bpm": self.score.bpm,
                 "measureCount": len(self.score.measures), "sections": analysis.get("sections", []),
                 "notesPerMeasure": [{"measure": number, **count} for number, count in counts.items()]}
 
@@ -203,7 +203,7 @@ class LessonOrchestrator:
         if self.brain:
             try:
                 async with asyncio.timeout(ANALYSIS_TIMEOUT_S):
-                    result = await getattr(self.brain, "analyze_pages")(page_paths, {"measureCount": len(self.score.measures), "timeSignature": self.score.timeSignature.model_dump(), "bpm": self.score.bpm, "keyFifths": self.score.keyFifths})
+                    result = await getattr(self.brain, "analyze_pages")(page_paths, {"title": self.score.title, "composer": self.score.composer, "measureCount": len(self.score.measures), "timeSignature": self.score.timeSignature.model_dump(), "bpm": self.score.bpm, "keyFifths": self.score.keyFifths})
             except TimeoutError:
                 log.warning("analysis timed out after %ss; fallback", ANALYSIS_TIMEOUT_S)
                 await self._close_brain()
