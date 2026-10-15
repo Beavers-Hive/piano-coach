@@ -167,6 +167,7 @@ type LessonState = "idle" | "importing" | "analyzing" | "hearing" | "planning"
 | POST | /api/songs | multipart の `file`（PDF）→ `{ songId }`。sha256 で assets/scores の PDF と照合する。一致しない場合は 422 |
 | GET | /api/songs/{songId}/pages/{n}.png | ページ画像 |
 | GET | /api/tts/{hash}.wav | 生成済みの音声 |
+| GET | /api/exercises/{exerciseId}/score.musicxml | その課題（抜き出したフレーズ、または基礎練習）の楽譜。MusicXML（partwise、1 パート 2 段: 1 段目＝右手のト音記号、2 段目＝左手のヘ音記号）。調・拍子・テンポ（timeline.bpm）を含む。小節番号は元の曲の番号（基礎練習は 1 から）。運指は `<fingering>` で入れる。サーバーは直近 20 件の課題を覚えておき、それ以外は 404 |
 | POST | /api/voice/test | `{ engine: "irodori" \| "webspeech", urls: string[], text: string }`。準備画面の声のテスト用。必ず Irodori を通す。engine が webspeech のときは、フロントが text を Web Speech で読み、**画面に警告を出す** |
 | GET | /api/health | `{ claude: bool, tts: bool }` |
 
@@ -195,3 +196,11 @@ class VoiceService:
 - `prompts/tutor_system.md`: レッスンセッションのシステムプロンプト
 - `prompts/analyze_system.md`: 曲の構造解析
 - `prompts/fingering_system.md`: 運指の設計
+
+## 楽譜モード（フロント）
+
+- 表示モード `viewMode`: `"notes"`（落ちてくるノーツだけ）／ `"score"`（楽譜だけ）／ `"both"`（両方）。store に置き、切り替えのボタンを画面に出す。
+- 楽譜は Verovio（npm の `verovio` パッケージ。WASM を同梱し、実行時に外部へアクセスしない）で SVG に描く。
+- `exercise.ready` を受けたら、`/api/exercises/{exerciseId}/score.musicxml` を取得して描く。
+- 再生と演奏の間は、`getPlayheadMs()` に合わせてカーソルを動かし、いま弾く音を強調する。Verovio の timemap（MusicXML のテンポ＝timeline.bpm なので、Verovio の時刻と playhead が一致する）で、時刻と音符の要素を対応付ける。
+- 判定の結果（perfect / good / miss）を、楽譜の音符の色にも反映する。
